@@ -57,7 +57,8 @@ export interface Pedido {
   total: number;
   descuento: number;
   fecha: Date;
-  estado: 'Pendiente' | 'Confirmado' | 'Cancelado';
+  estado: 'Pendiente' | 'Confirmado' | 'Cancelado' | 'Entregado';
+  direccionEntrega?: string;
 }
 
 export interface MovimientoStock {

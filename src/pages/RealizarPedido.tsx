@@ -1,236 +1,261 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { productosMock, buscarProductos, pedidosMock } from '../data/mockData';
-import type { Producto, ItemCarrito } from '../types';
+import { useAuth } from '../context/AuthContext';
+import type { Producto, DetalleVenta } from '../types';
+import { Search, ShoppingCart, Plus, Minus, Trash2, CheckCircle, History, MapPin, BookOpen, Package } from 'lucide-react';
 
 export default function RealizarPedido() {
+  const { user } = useAuth();
+  const [modo, setModo] = useState<'buscar' | 'catalogo'>('catalogo');
   const [busqueda, setBusqueda] = useState('');
   const [resultados, setResultados] = useState<Producto[]>([]);
-  const [items, setItems] = useState<ItemCarrito[]>([]);
-  const [nombreCliente, setNombreCliente] = useState('Verónica Preste');
-  const [contactoCliente, setContactoCliente] = useState('veronica@libreriamaria.com');
-  const [descuento, setDescuento] = useState(0);
-  const [mostrarComprobante, setMostrarComprobante] = useState(false);
+  const [items, setItems] = useState<DetalleVenta[]>([]);
+  const [direccion, setDireccion] = useState('');
+  const [mostrarConfirmacion, setMostrarConfirmacion] = useState(false);
   const [error, setError] = useState('');
-  const [pedidoNro, setPedidoNro] = useState(0);
-  const [verCatalogo, setVerCatalogo] = useState(false);
+  const [verHistorial, setVerHistorial] = useState(false);
+  const [categoriaFiltro, setCategoriaFiltro] = useState('Todas');
+
+  const categorias = useMemo(() => {
+    const cats = new Set(productosMock.map(p => p.categoria));
+    return ['Todas', ...Array.from(cats)];
+  }, []);
+
+  const productosFiltrados = useMemo(() => {
+    if (categoriaFiltro === 'Todas') return productosMock;
+    return productosMock.filter(p => p.categoria === categoriaFiltro);
+  }, [categoriaFiltro]);
 
   const handleBuscar = () => {
     if (!busqueda.trim()) return;
-    setResultados(buscarProductos(busqueda).filter(p => p.stockActual > 0));
+    setResultados(buscarProductos(busqueda));
   };
 
-  const agregarAlCarrito = (p: Producto) => {
+  const agregarItem = (p: Producto) => {
     setError('');
     const existente = items.find(i => i.producto.codigo === p.codigo);
     if (existente) {
-      setItems(items.map(i =>
-        i.producto.codigo === p.codigo ? { ...i, cantidad: i.cantidad + 1 } : i
-      ));
+      if (existente.cantidad + 1 > p.stockActual) { setError(`Stock insuficiente. Disponible: ${p.stockActual}`); return; }
+      setItems(items.map(i => i.producto.codigo === p.codigo ? { ...i, cantidad: i.cantidad + 1, subtotal: (i.cantidad + 1) * i.precioCongelado } : i));
     } else {
-      if (p.stockActual < 1) { setError(`"${p.nombre}" no tiene stock disponible.`); return; }
-      setItems([...items, { producto: p, cantidad: 1, precioCongelado: p.precioVenta }]);
+      if (1 > p.stockActual) { setError(`Stock insuficiente para "${p.nombre}".`); return; }
+      setItems([...items, { producto: p, cantidad: 1, precioCongelado: p.precioVenta, subtotal: p.precioVenta }]);
     }
-    setBusqueda('');
-    setResultados([]);
+    setBusqueda(''); setResultados([]);
   };
 
-  const cambiarCantidad = (codigo: string, cant: number) => {
+  const cambiarCantidad = (codigo: string, nuevaCant: number) => {
     setError('');
-    if (cant < 1) { setItems(items.filter(i => i.producto.codigo !== codigo)); return; }
+    if (nuevaCant < 1) { setItems(items.filter(i => i.producto.codigo !== codigo)); return; }
     const p = items.find(i => i.producto.codigo === codigo);
-    if (p && cant > p.producto.stockActual) { setError(`Stock insuficiente. Máximo: ${p.producto.stockActual}`); return; }
-    setItems(items.map(i => i.producto.codigo === codigo ? { ...i, cantidad: cant } : i));
+    if (p && nuevaCant > p.producto.stockActual) { setError(`Stock insuficiente. Máximo: ${p.producto.stockActual}`); return; }
+    setItems(items.map(i => i.producto.codigo === codigo ? { ...i, cantidad: nuevaCant, subtotal: nuevaCant * i.precioCongelado } : i));
   };
 
-  const subtotal = items.reduce((sum, i) => sum + i.cantidad * i.precioCongelado, 0);
-  const descuentoAplicado = subtotal * (descuento / 100);
-  const total = subtotal - descuentoAplicado;
+  const total = items.reduce((sum, i) => sum + i.subtotal, 0);
 
   const confirmarPedido = () => {
     setError('');
-    if (!nombreCliente.trim() || !contactoCliente.trim()) { setError('Complete los datos del cliente.'); return; }
-    if (items.length === 0) { setError('El carrito está vacío.'); return; }
+    if (items.length === 0) { setError('Agregue al menos un producto.'); return; }
+    if (!direccion.trim()) { setError('Ingrese una dirección de entrega.'); return; }
     for (const item of items) {
       const p = productosMock.find(pr => pr.codigo === item.producto.codigo);
       if (!p || p.stockActual < item.cantidad) { setError(`Stock insuficiente para "${item.producto.nombre}".`); return; }
     }
-    for (const item of items) {
-      const p = productosMock.find(pr => pr.codigo === item.producto.codigo);
-      if (p) p.stockActual -= item.cantidad;
-    }
-    const nro = Math.floor(Math.random() * 9000) + 1000;
-    setPedidoNro(nro);
-    setMostrarComprobante(true);
+    for (const item of items) { const p = productosMock.find(pr => pr.codigo === item.producto.codigo); if (p) p.stockActual -= item.cantidad; }
+    setMostrarConfirmacion(true);
   };
 
-  const nuevoPedido = () => {
-    setItems([]); setBusqueda(''); setResultados([]);
-    setNombreCliente('Verónica Preste'); setContactoCliente('veronica@libreriamaria.com');
-    setDescuento(0); setMostrarComprobante(false); setError('');
-  };
+  const nuevoPedido = () => { setItems([]); setDireccion(''); setMostrarConfirmacion(false); setError(''); setBusqueda(''); setResultados([]); };
 
-  if (mostrarComprobante) {
+  const cantidadEnCarrito = (codigo: string) => items.find(i => i.producto.codigo === codigo)?.cantidad ?? 0;
+
+  if (mostrarConfirmacion) {
     return (
       <div className="max-w-xl mx-auto">
         <div className="bg-white rounded-xl border border-slate-200 p-6">
           <div className="text-center mb-6">
-            <div className="text-4xl mb-2">📄</div>
+            <ShoppingCart size={40} className="mx-auto text-blue-600 mb-2" />
             <h2 className="text-lg font-semibold text-slate-800">Pedido Confirmado</h2>
-            <p className="text-sm text-slate-500">Librería María — Pedido Web</p>
+            <p className="text-sm text-slate-500">Librería María</p>
           </div>
           <div className="border-t border-b border-slate-200 py-3 mb-4 text-sm space-y-1">
-            <p><strong>N° Pedido:</strong> {pedidoNro}</p>
+            <p><strong>Cliente:</strong> {user?.nombreReal}</p>
             <p><strong>Fecha:</strong> {new Date().toLocaleString('es-AR')}</p>
-            <p><strong>Cliente:</strong> {nombreCliente}</p>
-            <p><strong>Contacto:</strong> {contactoCliente}</p>
-            <p><strong>Estado:</strong> <span className="text-yellow-600 font-medium">Pendiente de confirmación</span></p>
+            <p className="flex items-center gap-1"><MapPin size={14} /> <strong>Entrega:</strong> {direccion}</p>
+            <p><strong>Estado:</strong> <span className="text-yellow-600 font-medium">Pendiente</span></p>
           </div>
           <table className="w-full text-sm mb-4">
             <thead><tr className="border-b border-slate-200"><th className="text-left py-2">Producto</th><th className="text-center py-2">Cant.</th><th className="text-right py-2">P. Unit.</th><th className="text-right py-2">Subtotal</th></tr></thead>
-            <tbody>
-              {items.map(i => (
-                <tr key={i.producto.codigo} className="border-b border-slate-100">
-                  <td className="py-2">{i.producto.nombre}</td>
-                  <td className="text-center py-2">{i.cantidad}</td>
-                  <td className="text-right py-2">${i.precioCongelado.toFixed(2)}</td>
-                  <td className="text-right py-2">${(i.cantidad * i.precioCongelado).toFixed(2)}</td>
-                </tr>
-              ))}
-            </tbody>
+            <tbody>{items.map(i => (<tr key={i.producto.codigo} className="border-b border-slate-100"><td className="py-2">{i.producto.nombre}</td><td className="text-center py-2">{i.cantidad}</td><td className="text-right py-2">${i.precioCongelado.toFixed(2)}</td><td className="text-right py-2">${i.subtotal.toFixed(2)}</td></tr>))}</tbody>
           </table>
-          {descuento > 0 && <div className="text-right text-sm text-slate-500 mb-1">Descuento ({descuento}%): -${descuentoAplicado.toFixed(2)}</div>}
           <div className="text-right text-xl font-bold text-slate-800 mb-6">Total: ${total.toFixed(2)}</div>
-          <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg text-sm mb-4">
-            El stock ha sido comprometido/reservado. El pedido queda en estado "Pendiente" hasta que el empleado lo confirme.
-          </div>
-          <button onClick={nuevoPedido} className="w-full px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors">Nuevo Pedido</button>
+          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm mb-4 flex items-center gap-2 justify-center"><CheckCircle size={16} /> Pedido registrado. Recibirá notificaciones sobre el estado.</div>
+          <button onClick={nuevoPedido} className="w-full px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors text-sm">Nuevo Pedido</button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-5xl mx-auto">
       <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-slate-800">Realizar Pedido</h2>
-          <button onClick={() => setVerCatalogo(!verCatalogo)} className="text-sm text-blue-600 hover:text-blue-800 underline">
-            {verCatalogo ? 'Ocultar catálogo' : 'Ver catálogo de productos'}
+          <div className="flex items-center gap-2"><ShoppingCart size={20} className="text-blue-600" /><h2 className="text-lg font-semibold text-slate-800">Realizar Pedido</h2></div>
+          <button onClick={() => setVerHistorial(!verHistorial)} className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 transition-colors">
+            <History size={16} /> {verHistorial ? 'Ocultar mis pedidos' : 'Mis pedidos'}
           </button>
         </div>
 
         {error && <div className="mb-4 bg-red-50 text-red-600 px-4 py-2 rounded-lg text-sm">{error}</div>}
 
-        {/* Catálogo completo */}
-        {verCatalogo && (
+        {verHistorial && (
           <div className="mb-6">
-            <h3 className="text-sm font-semibold text-slate-700 mb-2">Catálogo de productos</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {productosMock.filter(p => p.stockActual > 0).map(p => (
-                <div key={p.codigo} className="border border-slate-200 rounded-lg p-3 flex items-center justify-between hover:border-blue-300 cursor-pointer" onClick={() => agregarAlCarrito(p)}>
-                  <div>
-                    <p className="font-medium text-slate-800">{p.nombre}</p>
-                    <p className="text-xs text-slate-500">{p.categoria} | Stock: {p.stockActual}</p>
+            <h3 className="text-sm font-semibold text-slate-700 mb-2">Pedidos anteriores</h3>
+            <div className="overflow-x-auto border border-slate-200 rounded-lg max-h-48 overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 sticky top-0">
+                  <tr><th className="text-left px-3 py-2">N°</th><th className="text-left px-3 py-2">Fecha</th><th className="text-left px-3 py-2">Dirección</th><th className="text-right px-3 py-2">Total</th><th className="text-left px-3 py-2">Estado</th></tr>
+                </thead>
+                <tbody>{pedidosMock.map(p => (
+                  <tr key={p.id} className="border-t border-slate-100 hover:bg-slate-50">
+                    <td className="px-3 py-2 font-mono">{p.id}</td>
+                    <td className="px-3 py-2 text-xs">{p.fecha.toLocaleString('es-AR')}</td>
+                    <td className="px-3 py-2 text-xs">{p.direccionEntrega}</td>
+                    <td className="px-3 py-2 text-right font-medium">${p.total.toFixed(2)}</td>
+                    <td className="px-3 py-2"><span className={`text-xs px-2 py-0.5 rounded-full ${p.estado === 'Entregado' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{p.estado}</span></td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Tabs: Buscar / Catálogo */}
+        <div className="flex gap-1 mb-4 border-b border-slate-200">
+          <button onClick={() => setModo('catalogo')}
+            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${modo === 'catalogo' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+            <BookOpen size={16} /> Catálogo
+          </button>
+          <button onClick={() => setModo('buscar')}
+            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${modo === 'buscar' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+            <Search size={16} /> Buscar
+          </button>
+        </div>
+
+        {/* Search mode */}
+        {modo === 'buscar' && (
+          <>
+            <div className="flex gap-2 mb-4">
+              <input type="text" value={busqueda} onChange={e => setBusqueda(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleBuscar()} placeholder="Buscar producto por nombre o código..." className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
+              <button onClick={handleBuscar} className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"><Search size={16} /> Buscar</button>
+            </div>
+
+            {resultados.length > 0 && (
+              <div className="mb-4 border border-slate-200 rounded-lg overflow-hidden max-h-60 overflow-y-auto">
+                {resultados.map(p => (
+                  <div key={p.codigo} className="flex items-center justify-between px-4 py-2.5 hover:bg-slate-50 border-b border-slate-100 last:border-0 cursor-pointer" onClick={() => agregarItem(p)}>
+                    <div><p className="font-medium text-slate-800 text-sm">{p.nombre}</p><p className="text-xs text-slate-500">Stock: {p.stockActual} | Cód: {p.codigo}</p></div>
+                    <div className="text-right"><p className="font-semibold text-blue-600">${p.precioVenta.toFixed(2)}</p><p className="text-xs text-green-600 flex items-center gap-0.5"><Plus size={12} /> agregar</p></div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-semibold text-blue-600">${p.precioVenta.toFixed(2)}</p>
-                    <p className="text-xs text-green-600">Click +</p>
-                  </div>
-                </div>
+                ))}
+              </div>
+            )}
+
+            {!resultados.length && <p className="text-sm text-slate-400 text-center py-4">Busque productos por nombre o código.</p>}
+          </>
+        )}
+
+        {/* Catalog mode */}
+        {modo === 'catalogo' && (
+          <div>
+            <div className="flex flex-wrap gap-2 mb-4">
+              {categorias.map(cat => (
+                <button key={cat} onClick={() => setCategoriaFiltro(cat)}
+                  className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${categoriaFiltro === cat ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-300 hover:border-blue-400'}`}>
+                  {cat}
+                </button>
               ))}
             </div>
-          </div>
-        )}
 
-        {/* Pedidos pendientes del cliente */}
-        {pedidosMock.filter(p => p.estado === 'Pendiente').length > 0 && (
-          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <h4 className="text-sm font-semibold text-yellow-700 mb-2">📋 Mis pedidos pendientes</h4>
-            {pedidosMock.filter(p => p.estado === 'Pendiente').map(p => (
-              <div key={p.id} className="text-sm text-yellow-600 flex justify-between border-b border-yellow-100 py-1 last:border-0">
-                <span>N° {p.id} — {p.items.length} producto(s)</span>
-                <span className="font-medium">${p.total.toFixed(2)}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Datos del cliente */}
-        <div className="grid grid-cols-2 gap-4 mb-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Nombre <span className="text-red-500">*</span></label>
-            <input type="text" value={nombreCliente} onChange={e => setNombreCliente(e.target.value)} placeholder="Nombre y apellido" className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Contacto <span className="text-red-500">*</span></label>
-            <input type="text" value={contactoCliente} onChange={e => setContactoCliente(e.target.value)} placeholder="Email o teléfono" className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
-          </div>
-        </div>
-
-        {/* Buscador */}
-        <div className="flex gap-2 mb-4">
-          <input type="text" value={busqueda} onChange={e => setBusqueda(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleBuscar()} placeholder="Buscar productos del catálogo..." className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
-          <button onClick={handleBuscar} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">Buscar</button>
-        </div>
-
-        {resultados.length > 0 && (
-          <div className="mb-4 border border-slate-200 rounded-lg overflow-hidden max-h-48 overflow-y-auto">
-            {resultados.map(p => (
-              <div key={p.codigo} className="flex items-center justify-between px-4 py-2.5 hover:bg-blue-50 border-b border-slate-100 last:border-0 cursor-pointer" onClick={() => agregarAlCarrito(p)}>
-                <div><p className="font-medium text-slate-800">{p.nombre}</p><p className="text-xs text-slate-500">Stock disp: {p.stockActual}</p></div>
-                <p className="font-semibold text-blue-600">${p.precioVenta.toFixed(2)}</p>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {items.length > 0 && (
-          <div className="mb-4">
-            <h3 className="text-sm font-semibold text-slate-700 mb-2">Carrito de compras:</h3>
-            <table className="w-full text-sm">
-              <thead><tr className="border-b border-slate-200"><th className="text-left py-2">Producto</th><th className="text-center py-2">Cantidad</th><th className="text-right py-2">Precio</th><th className="text-right py-2">Subtotal</th><th></th></tr></thead>
-              <tbody>
-                {items.map(i => (
-                  <tr key={i.producto.codigo} className="border-b border-slate-100">
-                    <td className="py-2">{i.producto.nombre}</td>
-                    <td className="text-center py-2">
-                      <div className="inline-flex items-center gap-1">
-                        <button onClick={() => cambiarCantidad(i.producto.codigo, i.cantidad - 1)} className="w-7 h-7 bg-slate-100 rounded hover:bg-slate-200">-</button>
-                        <span className="w-8 text-center font-medium">{i.cantidad}</span>
-                        <button onClick={() => cambiarCantidad(i.producto.codigo, i.cantidad + 1)} className="w-7 h-7 bg-slate-100 rounded hover:bg-slate-200">+</button>
-                      </div>
-                    </td>
-                    <td className="text-right py-2">${i.precioCongelado.toFixed(2)}</td>
-                    <td className="text-right py-2">${(i.cantidad * i.precioCongelado).toFixed(2)}</td>
-                    <td className="text-center py-2"><button onClick={() => setItems(items.filter(x => x.producto.codigo !== i.producto.codigo))} className="text-red-500 hover:text-red-700 text-xs">✕</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="flex justify-end items-center gap-4 mt-3">
-              <div className="flex items-center gap-2">
-                <label className="text-sm text-slate-600">Descuento:</label>
-                <select value={descuento} onChange={e => setDescuento(parseInt(e.target.value))} className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm">
-                  <option value={0}>0%</option><option value={5}>5%</option><option value={10}>10%</option><option value={15}>15%</option><option value={20}>20%</option>
-                </select>
-              </div>
-              <div className="text-right">
-                <p className="text-sm text-slate-500">Subtotal: ${subtotal.toFixed(2)}</p>
-                {descuento > 0 && <p className="text-sm text-green-600">Dto. {descuento}%: -${descuentoAplicado.toFixed(2)}</p>}
-                <p className="text-xl font-bold text-slate-800">Total: ${total.toFixed(2)}</p>
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+              {productosFiltrados.map(p => {
+                const enCarrito = cantidadEnCarrito(p.codigo);
+                const sinStock = p.stockActual <= 0;
+                return (
+                  <div key={p.codigo} className={`border rounded-xl p-4 transition-all ${sinStock ? 'border-slate-200 bg-slate-50 opacity-60' : 'border-slate-200 hover:border-blue-300 hover:shadow-sm'}`}>
+                    <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 mb-2">
+                      <Package size={18} />
+                    </div>
+                    <h3 className="font-medium text-slate-800 text-sm">{p.nombre}</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">{p.categoria} | Cód: {p.codigo}</p>
+                    <div className="flex items-center justify-between mt-3">
+                      <p className="text-lg font-bold text-blue-600">${p.precioVenta.toFixed(2)}</p>
+                      {sinStock ? (
+                        <span className="text-xs text-red-500 font-medium">Sin stock</span>
+                      ) : (
+                        <button onClick={() => agregarItem(p)}
+                          className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs font-medium">
+                          <Plus size={14} /> {enCarrito > 0 ? `+${enCarrito}` : 'Agregar'}
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">Stock: {p.stockActual} uds.</p>
+                  </div>
+                );
+              })}
             </div>
-            <button onClick={confirmarPedido} className="w-full mt-4 px-4 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors text-lg">Confirmar Pedido</button>
+
+            {productosFiltrados.length === 0 && (
+              <p className="text-sm text-slate-400 text-center py-4">No hay productos en esta categoría.</p>
+            )}
           </div>
         )}
 
-        {items.length === 0 && !resultados.length && !verCatalogo && (
-          <div className="text-center py-8 text-slate-400">Busque productos o vea el catálogo completo para agregar a su carrito.</div>
+        {/* Carrito */}
+        {items.length > 0 && (
+          <div className="mt-6 border-t border-slate-200 pt-4">
+            <div className="flex items-center gap-2 mb-3">
+              <ShoppingCart size={16} className="text-blue-600" />
+              <h3 className="text-sm font-semibold text-slate-700">Carrito ({items.length} {items.length === 1 ? 'producto' : 'productos'})</h3>
+            </div>
+            <table className="w-full text-sm mb-3">
+              <thead><tr className="border-b border-slate-200"><th className="text-left py-2">Producto</th><th className="text-center py-2">Cantidad</th><th className="text-right py-2">P. Unit.</th><th className="text-right py-2">Subtotal</th><th className="w-10"></th></tr></thead>
+              <tbody>{items.map(i => (
+                <tr key={i.producto.codigo} className="border-b border-slate-100">
+                  <td className="py-2 text-sm">{i.producto.nombre}</td>
+                  <td className="text-center py-2">
+                    <div className="inline-flex items-center gap-1">
+                      <button onClick={() => cambiarCantidad(i.producto.codigo, i.cantidad - 1)} className="w-7 h-7 bg-slate-100 rounded hover:bg-slate-200 flex items-center justify-center"><Minus size={14} /></button>
+                      <span className="w-8 text-center font-medium text-sm tabular-nums">{i.cantidad}</span>
+                      <button onClick={() => cambiarCantidad(i.producto.codigo, i.cantidad + 1)} className="w-7 h-7 bg-slate-100 rounded hover:bg-slate-200 flex items-center justify-center"><Plus size={14} /></button>
+                    </div>
+                  </td>
+                  <td className="text-right py-2 text-sm tabular-nums">${i.precioCongelado.toFixed(2)}</td>
+                  <td className="text-right py-2 text-sm tabular-nums font-medium">${i.subtotal.toFixed(2)}</td>
+                  <td className="text-center py-2"><button onClick={() => setItems(items.filter(x => x.producto.codigo !== i.producto.codigo))} className="text-red-400 hover:text-red-600 transition-colors"><Trash2 size={14} /></button></td>
+                </tr>
+              ))}</tbody>
+            </table>
+            <div className="text-right text-xl font-bold text-slate-800 tabular-nums mb-4">Total: ${total.toFixed(2)}</div>
+
+            <div className="space-y-4 border-t border-slate-200 pt-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-1.5"><MapPin size={14} /> Dirección de entrega <span className="text-red-500">*</span></label>
+                <input type="text" value={direccion} onChange={e => setDireccion(e.target.value)} placeholder="Calle, número, ciudad..." className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
+              </div>
+              <button onClick={confirmarPedido} className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors text-base flex items-center justify-center gap-2">
+                <ShoppingCart size={18} /> Confirmar Pedido — ${total.toFixed(2)}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {items.length === 0 && modo === 'buscar' && !resultados.length && (
+          <p className="text-sm text-slate-400 text-center py-4">Busque productos para armar su pedido.</p>
         )}
       </div>
-      <div className="text-xs text-slate-400 text-center">
-        Contrato: realizarPedido(datosCliente, listaItems) — UC-10 Realizar Pedido
-      </div>
+      <div className="text-xs text-slate-400 text-center font-mono">Contrato: realizarPedido(listaItems, idCliente, direccionEntrega) — UC-09</div>
     </div>
   );
 }

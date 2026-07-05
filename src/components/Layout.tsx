@@ -1,19 +1,42 @@
-import { Outlet } from 'react-router-dom';
-import Sidebar from './Sidebar';
-import Header from './Header';
+import { Outlet, useLocation } from 'react-router-dom';
+import Navbar from './Navbar';
 import Footer from './Footer';
 
+const pageTitles: Record<string, string> = {
+  '/dashboard': 'Dashboard',
+  '/products/register': 'Registrar Producto',
+  '/sales/register': 'Registrar Venta',
+  '/stock/adjust': 'Ajustar Stock',
+  '/orders/create': 'Realizar Pedido',
+};
+
 export default function Layout() {
+  const location = useLocation();
+  const title = pageTitles[location.pathname] || '';
+
   return (
-    <div className="flex h-screen bg-slate-50">
-      <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <Header />
-        <main className="flex-1 overflow-y-auto p-6">
-          <Outlet />
-        </main>
-        <Footer />
-      </div>
+    <div className="min-h-screen flex flex-col bg-slate-50">
+      <Navbar />
+
+      {title && (
+        <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3 flex items-center justify-between shrink-0">
+          <h1 className="text-lg font-semibold text-slate-800">{title}</h1>
+          <div className="text-sm text-slate-400">
+            {new Date().toLocaleDateString('es-AR', {
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            })}
+          </div>
+        </div>
+      )}
+
+      <main className="flex-1 p-4 sm:p-6 overflow-y-auto">
+        <Outlet />
+      </main>
+
+      <Footer />
     </div>
   );
 }
