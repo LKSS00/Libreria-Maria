@@ -1,1 +1,70 @@
 @import "tailwindcss";
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #comprobante-print,
+  #comprobante-print * {
+    visibility: visible;
+  }
+  #comprobante-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 20px;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12px;
+    color: #000;
+  }
+  #comprobante-print .no-print {
+    display: none !important;
+  }
+  #comprobante-print h1 {
+    font-size: 20px;
+    font-weight: bold;
+    text-align: center;
+    margin-bottom: 4px;
+  }
+  #comprobante-print .subtitle {
+    text-align: center;
+    font-size: 14px;
+    margin-bottom: 16px;
+  }
+  #comprobante-print .header-info {
+    border-top: 2px solid #000;
+    border-bottom: 1px solid #000;
+    padding: 8px 0;
+    margin-bottom: 12px;
+  }
+  #comprobante-print table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 12px;
+  }
+  #comprobante-print th {
+    border-bottom: 2px solid #000;
+    padding: 6px 4px;
+    text-align: left;
+    font-weight: bold;
+    font-size: 11px;
+  }
+  #comprobante-print td {
+    border-bottom: 1px solid #ccc;
+    padding: 5px 4px;
+  }
+  #comprobante-print .total-row {
+    font-weight: bold;
+    font-size: 14px;
+    border-top: 2px solid #000;
+    padding-top: 6px;
+  }
+  #comprobante-print .footer {
+    margin-top: 20px;
+    border-top: 1px solid #000;
+    padding-top: 8px;
+    font-size: 10px;
+    text-align: center;
+  }
+}

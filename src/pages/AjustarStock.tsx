@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { productosMock, buscarProductos, movimientosStockMock } from '../data/mockData';
 import { useAuth } from '../context/AuthContext';
 import type { Producto, MovimientoStock } from '../types';
-import { Search, ClipboardList, Plus, Minus, CheckCircle, History } from 'lucide-react';
+import { Search, ClipboardList, Plus, Minus, CheckCircle, History, Printer, Download, ArrowUp, ArrowDown } from 'lucide-react';
+import { generarPDF, imprimirComprobante } from '../utils/pdfComprobante';
 
 export default function AjustarStock() {
   const { user } = useAuth();
@@ -13,8 +14,16 @@ export default function AjustarStock() {
   const [cantidad, setCantidad] = useState('');
   const [motivo, setMotivo] = useState('');
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [verMovimientos, setVerMovimientos] = useState(false);
+  const [mostrarConfirmacion, setMostrarConfirmacion] = useState(false);
+  const [ultimoAjuste, setUltimoAjuste] = useState<{
+    producto: Producto;
+    tipo: 'ingreso' | 'egreso';
+    cantidad: number;
+    motivo: string;
+    cantidadAnterior: number;
+    cantidadNueva: number;
+  } | null>(null);
 
   const handleBuscar = () => {
     if (!busqueda.trim()) return;
@@ -26,12 +35,11 @@ export default function AjustarStock() {
     setResultados([]);
     setBusqueda('');
     setError('');
-    setSuccess('');
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setError(''); setSuccess('');
+    setError('');
     const cant = parseInt(cantidad);
     if (!seleccionado) { setError('Seleccione un producto.'); return; }
     if (!cant || cant < 1) { setError('Ingrese una cantidad válida.'); return; }
@@ -54,16 +62,101 @@ export default function AjustarStock() {
       fecha: new Date(),
     });
 
-    setSuccess(`Stock actualizado: "${p.nombre}" ${tipo === 'ingreso' ? `+${cant}` : `-${cant}`} → ${p.stockActual} unidades.`);
+    setUltimoAjuste({ producto: p, tipo, cantidad: cant, motivo: motivo.trim(), cantidadAnterior, cantidadNueva: p.stockActual });
+    setMostrarConfirmacion(true);
     setCantidad('');
     setMotivo('');
   };
 
   const nuevoAjuste = () => {
-    setSeleccionado(null); setCantidad(''); setMotivo(''); setTipo('ingreso'); setError(''); setSuccess('');
+    setSeleccionado(null); setCantidad(''); setMotivo(''); setTipo('ingreso'); setError(''); setMostrarConfirmacion(false); setUltimoAjuste(null);
   };
 
   const productoPorCodigo = (codigo: string) => productosMock.find(p => p.codigo === codigo);
+
+  if (mostrarConfirmacion && ultimoAjuste) {
+    const nroAjuste = movimientosStockMock.length;
+    const handleDownloadPDF = () => {
+      generarPDF({
+        titulo: 'COMPROBANTE DE AJUSTE DE STOCK',
+        numero: nroAjuste,
+        cliente: user?.nombreReal ?? '—',
+        items: [{
+          producto: `${ultimoAjuste.producto.nombre} (${ultimoAjuste.tipo === 'ingreso' ? 'Ingreso' : 'Egreso'})`,
+          cantidad: ultimoAjuste.cantidad,
+          precioUnitario: 0,
+          subtotal: 0,
+        }],
+        total: 0,
+        fecha: new Date(),
+        etiquetaCliente: 'Responsable',
+      });
+    };
+
+    return (
+      <div className="max-w-xl mx-auto">
+        <div id="comprobante-print" className="bg-white rounded-xl border border-slate-200 p-6">
+          <div className="text-center mb-6">
+            <div className="text-3xl font-bold text-slate-800" style={{ fontFamily: "'Times New Roman', serif" }}>Librería María</div>
+            <p className="text-xs text-slate-500 mt-1">Av. 9 de Julio 1200 — Apóstoles, Misiones</p>
+            <p className="text-xs text-slate-500">Tel: xxx | xxx@gmail.com</p>
+            <hr className="my-3 border-t-2 border-slate-800" />
+            <h2 className="text-lg font-bold text-slate-800 tracking-wide uppercase">Comprobante de Ajuste de Stock</h2>
+          </div>
+          <div className="text-sm space-y-1 mb-4 pb-3 border-b border-slate-300">
+            <div className="flex justify-between">
+              <span><strong>N° Ajuste:</strong> {nroAjuste}</span>
+              <span><strong>Fecha:</strong> {new Date().toLocaleDateString('es-AR')}</span>
+            </div>
+            <div className="flex justify-between">
+              <span><strong>Responsable:</strong> {user?.nombreReal}</span>
+              <span><strong>Hora:</strong> {new Date().toLocaleTimeString('es-AR')}</span>
+            </div>
+          </div>
+          <table className="w-full text-sm mb-4">
+            <thead>
+              <tr className="border-b-2 border-slate-800">
+                <th className="text-left py-2 text-xs uppercase tracking-wide">Producto</th>
+                <th className="text-center py-2 text-xs uppercase tracking-wide">Tipo</th>
+                <th className="text-right py-2 text-xs uppercase tracking-wide">Antes</th>
+                <th className="text-right py-2 text-xs uppercase tracking-wide">Cant.</th>
+                <th className="text-right py-2 text-xs uppercase tracking-wide">Después</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-b border-slate-200">
+                <td className="py-2">{ultimoAjuste.producto.nombre}</td>
+                <td className="text-center py-2">
+                  <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${ultimoAjuste.tipo === 'ingreso' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                    {ultimoAjuste.tipo === 'ingreso' ? <ArrowUp size={12} /> : <ArrowDown size={12} />} {ultimoAjuste.tipo}
+                  </span>
+                </td>
+                <td className="text-right py-2 tabular-nums">{ultimoAjuste.cantidadAnterior}</td>
+                <td className="text-right py-2 tabular-nums font-medium">{ultimoAjuste.cantidad}</td>
+                <td className="text-right py-2 tabular-nums font-bold">{ultimoAjuste.cantidadNueva}</td>
+              </tr>
+            </tbody>
+          </table>
+          <p className="text-sm mb-4"><strong>Motivo:</strong> {ultimoAjuste.motivo}</p>
+          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm mb-4 flex items-center gap-2 justify-center no-print"><CheckCircle size={16} /> Stock actualizado correctamente.</div>
+          <div className="flex flex-col sm:flex-row gap-3 no-print">
+            <button onClick={handleDownloadPDF} className="flex items-center justify-center gap-1.5 flex-1 px-4 py-2.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors text-sm">
+              <Download size={16} /> Descargar PDF
+            </button>
+            <button onClick={imprimirComprobante} className="flex items-center justify-center gap-1.5 flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors text-sm">
+              <Printer size={16} /> Imprimir
+            </button>
+            <button onClick={nuevoAjuste} className="flex items-center justify-center gap-1.5 flex-1 px-4 py-2.5 border border-slate-300 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-colors text-sm">
+              Nuevo Ajuste
+            </button>
+          </div>
+          <div className="text-center text-xs text-slate-400 mt-4 pt-3 border-t border-slate-200 no-print">
+            <p>Contrato: ajustarStock(idProducto, cantidad, tipo, motivo, idResponsable) — UC-10</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -104,7 +197,6 @@ export default function AjustarStock() {
           </div>
         )}
 
-        {/* Step 1: Buscar */}
         {!seleccionado && (
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Buscar producto</label>
@@ -129,7 +221,6 @@ export default function AjustarStock() {
           </div>
         )}
 
-        {/* Step 2: Ajustar */}
         {seleccionado && (
           <form onSubmit={handleSubmit}>
             <div className="mb-4 p-4 bg-slate-50 border border-slate-200 rounded-lg">
@@ -163,14 +254,13 @@ export default function AjustarStock() {
             </div>
 
             {error && <div className="mb-4 bg-red-50 text-red-600 px-4 py-2 rounded-lg text-sm">{error}</div>}
-            {success && <div className="mb-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm flex items-center gap-2"><CheckCircle size={16} /> {success}</div>}
 
             <div className="flex gap-3">
               <button type="submit" className="flex items-center gap-1.5 px-6 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors text-sm">
                 <CheckCircle size={16} /> Aplicar Ajuste
               </button>
-              <button type="button" onClick={nuevoAjuste} className="px-4 py-2.5 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors text-sm">
-                Nuevo ajuste
+              <button type="button" onClick={() => { setSeleccionado(null); setError(''); }} className="px-4 py-2.5 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors text-sm">
+                Cancelar
               </button>
             </div>
           </form>

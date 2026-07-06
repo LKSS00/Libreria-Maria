@@ -2,7 +2,8 @@ import { useState, useMemo } from 'react';
 import { productosMock, buscarProductos, pedidosMock } from '../data/mockData';
 import { useAuth } from '../context/AuthContext';
 import type { Producto, DetalleVenta } from '../types';
-import { Search, ShoppingCart, Plus, Minus, Trash2, CheckCircle, History, MapPin, BookOpen, Package } from 'lucide-react';
+import { Search, ShoppingCart, Plus, Minus, Trash2, CheckCircle, History, MapPin, BookOpen, Package, Printer, Download } from 'lucide-react';
+import { generarPDF, imprimirComprobante } from '../utils/pdfComprobante';
 
 export default function RealizarPedido() {
   const { user } = useAuth();
@@ -71,27 +72,87 @@ export default function RealizarPedido() {
   const cantidadEnCarrito = (codigo: string) => items.find(i => i.producto.codigo === codigo)?.cantidad ?? 0;
 
   if (mostrarConfirmacion) {
+    const nroPedido = Math.floor(Math.random() * 9000) + 1000;
+
+    const handleDownloadPDF = () => {
+      generarPDF({
+        titulo: 'COMPROBANTE DE PEDIDO',
+        numero: nroPedido,
+        cliente: user?.nombreReal ?? '—',
+        direccion,
+        items: items.map(i => ({
+          producto: i.producto.nombre,
+          cantidad: i.cantidad,
+          precioUnitario: i.precioCongelado,
+          subtotal: i.subtotal,
+        })),
+        total,
+        fecha: new Date(),
+        etiquetaCliente: 'Cliente',
+      });
+    };
+
     return (
       <div className="max-w-xl mx-auto">
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <div id="comprobante-print" className="bg-white rounded-xl border border-slate-200 p-6">
           <div className="text-center mb-6">
-            <ShoppingCart size={40} className="mx-auto text-blue-600 mb-2" />
-            <h2 className="text-lg font-semibold text-slate-800">Pedido Confirmado</h2>
-            <p className="text-sm text-slate-500">Librería María</p>
+            <div className="text-3xl font-bold text-slate-800" style={{ fontFamily: "'Times New Roman', serif" }}>Librería María</div>
+            <p className="text-xs text-slate-500 mt-1">Av. 9 de Julio 1200 — Apóstoles, Misiones</p>
+            <p className="text-xs text-slate-500">Tel: xxx | xxx@gmail.com</p>
+            <hr className="my-3 border-t-2 border-slate-800" />
+            <h2 className="text-lg font-bold text-slate-800 tracking-wide uppercase">Comprobante de Pedido</h2>
           </div>
-          <div className="border-t border-b border-slate-200 py-3 mb-4 text-sm space-y-1">
-            <p><strong>Cliente:</strong> {user?.nombreReal}</p>
-            <p><strong>Fecha:</strong> {new Date().toLocaleString('es-AR')}</p>
-            <p className="flex items-center gap-1"><MapPin size={14} /> <strong>Entrega:</strong> {direccion}</p>
-            <p><strong>Estado:</strong> <span className="text-yellow-600 font-medium">Pendiente</span></p>
+          <div className="text-sm space-y-1 mb-4 pb-3 border-b border-slate-300">
+            <div className="flex justify-between">
+              <span><strong>N° Pedido:</strong> {nroPedido}</span>
+              <span><strong>Fecha:</strong> {new Date().toLocaleDateString('es-AR')}</span>
+            </div>
+            <div className="flex justify-between">
+              <span><strong>Cliente:</strong> {user?.nombreReal}</span>
+              <span><strong>Hora:</strong> {new Date().toLocaleTimeString('es-AR')}</span>
+            </div>
+            <p><strong>Dirección de entrega:</strong> {direccion}</p>
+            <p><strong>Estado:</strong> Pendiente</p>
           </div>
           <table className="w-full text-sm mb-4">
-            <thead><tr className="border-b border-slate-200"><th className="text-left py-2">Producto</th><th className="text-center py-2">Cant.</th><th className="text-right py-2">P. Unit.</th><th className="text-right py-2">Subtotal</th></tr></thead>
-            <tbody>{items.map(i => (<tr key={i.producto.codigo} className="border-b border-slate-100"><td className="py-2">{i.producto.nombre}</td><td className="text-center py-2">{i.cantidad}</td><td className="text-right py-2">${i.precioCongelado.toFixed(2)}</td><td className="text-right py-2">${i.subtotal.toFixed(2)}</td></tr>))}</tbody>
+            <thead>
+              <tr className="border-b-2 border-slate-800">
+                <th className="text-left py-2 text-xs uppercase tracking-wide">Producto</th>
+                <th className="text-center py-2 text-xs uppercase tracking-wide">Cant.</th>
+                <th className="text-right py-2 text-xs uppercase tracking-wide">P. Unit.</th>
+                <th className="text-right py-2 text-xs uppercase tracking-wide">Subtotal</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map(i => (
+                <tr key={i.producto.codigo} className="border-b border-slate-200">
+                  <td className="py-2">{i.producto.nombre}</td>
+                  <td className="text-center py-2">{i.cantidad}</td>
+                  <td className="text-right py-2">${i.precioCongelado.toFixed(2)}</td>
+                  <td className="text-right py-2">${i.subtotal.toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
           </table>
-          <div className="text-right text-xl font-bold text-slate-800 mb-6">Total: ${total.toFixed(2)}</div>
-          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm mb-4 flex items-center gap-2 justify-center"><CheckCircle size={16} /> Pedido registrado. Recibirá notificaciones sobre el estado.</div>
-          <button onClick={nuevoPedido} className="w-full px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors text-sm">Nuevo Pedido</button>
+          <div className="flex justify-between items-center border-t-2 border-slate-800 pt-3 mb-6">
+            <span className="text-sm text-slate-600">Total {items.length} {items.length === 1 ? 'producto' : 'productos'}</span>
+            <span className="text-2xl font-bold text-slate-800">${total.toFixed(2)}</span>
+          </div>
+          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm mb-4 flex items-center gap-2 justify-center no-print"><CheckCircle size={16} /> Pedido registrado.</div>
+          <div className="flex flex-col sm:flex-row gap-3 no-print">
+            <button onClick={handleDownloadPDF} className="flex items-center justify-center gap-1.5 flex-1 px-4 py-2.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors text-sm">
+              <Download size={16} /> Descargar PDF
+            </button>
+            <button onClick={imprimirComprobante} className="flex items-center justify-center gap-1.5 flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors text-sm">
+              <Printer size={16} /> Imprimir
+            </button>
+            <button onClick={nuevoPedido} className="flex items-center justify-center gap-1.5 flex-1 px-4 py-2.5 border border-slate-300 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-colors text-sm">
+              Nuevo Pedido
+            </button>
+          </div>
+          <div className="text-center text-xs text-slate-400 mt-4 pt-3 border-t border-slate-200 no-print">
+            <p>Contrato: realizarPedido(listaItems, idCliente, direccionEntrega) — UC-09</p>
+          </div>
         </div>
       </div>
     );
