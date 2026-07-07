@@ -125,7 +125,7 @@ export default function AjustarStock() {
             </thead>
             <tbody>
               <tr className="border-b border-slate-200">
-                <td className="py-2">{ultimoAjuste.producto.nombre}</td>
+                <td className="py-2">{ultimoAjuste.producto.nombre} — {ultimoAjuste.producto.subcategoria}</td>
                 <td className="text-center py-2">
                   <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${ultimoAjuste.tipo === 'ingreso' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                     {ultimoAjuste.tipo === 'ingreso' ? <ArrowUp size={12} /> : <ArrowDown size={12} />} {ultimoAjuste.tipo}
@@ -209,7 +209,7 @@ export default function AjustarStock() {
                 {resultados.map(p => (
                   <div key={p.codigo} className="flex items-center justify-between px-4 py-2.5 hover:bg-slate-50 border-b border-slate-100 last:border-0 cursor-pointer" onClick={() => seleccionarProducto(p)}>
                     <div>
-                      <p className="font-medium text-slate-800 text-sm">{p.nombre}</p>
+                      <p className="font-medium text-slate-800 text-sm">{p.nombre} — {p.subcategoria}</p>
                       <p className="text-xs text-slate-500">Cód: {p.codigo} | Stock: {p.stockActual} | Mín: {p.stockMinimo}</p>
                     </div>
                     <p className="text-sm text-blue-600 font-medium">${p.precioVenta.toFixed(2)}</p>
@@ -224,7 +224,7 @@ export default function AjustarStock() {
         {seleccionado && (
           <form onSubmit={handleSubmit}>
             <div className="mb-4 p-4 bg-slate-50 border border-slate-200 rounded-lg">
-              <p className="text-sm font-medium text-slate-800 mb-2">Producto seleccionado: <strong>{seleccionado.nombre}</strong></p>
+              <p className="text-sm font-medium text-slate-800 mb-2">Producto seleccionado: <strong>{seleccionado.nombre} — {seleccionado.subcategoria}</strong></p>
               <p className="text-xs text-slate-500">Stock actual: <strong className={seleccionado.stockActual <= seleccionado.stockMinimo ? 'text-red-600' : ''}>{seleccionado.stockActual}</strong> | Mínimo: {seleccionado.stockMinimo}</p>
             </div>
 

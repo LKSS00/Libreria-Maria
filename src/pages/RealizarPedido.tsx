@@ -5,6 +5,10 @@ import type { Producto, DetalleVenta } from '../types';
 import { Search, ShoppingCart, Plus, Minus, Trash2, CheckCircle, History, MapPin, BookOpen, Package, Printer, Download } from 'lucide-react';
 import { generarPDF, imprimirComprobante } from '../utils/pdfComprobante';
 
+function displayName(p: Producto) {
+  return `${p.nombre} — ${p.subcategoria}`;
+}
+
 export default function RealizarPedido() {
   const { user } = useAuth();
   const [modo, setModo] = useState<'buscar' | 'catalogo'>('catalogo');
@@ -22,9 +26,14 @@ export default function RealizarPedido() {
     return ['Todas', ...Array.from(cats)];
   }, []);
 
-  const productosFiltrados = useMemo(() => {
-    if (categoriaFiltro === 'Todas') return productosMock;
-    return productosMock.filter(p => p.categoria === categoriaFiltro);
+  const familias = useMemo(() => {
+    const filtered = categoriaFiltro === 'Todas' ? productosMock : productosMock.filter(p => p.categoria === categoriaFiltro);
+    const map = new Map<string, Producto[]>();
+    for (const p of filtered) {
+      if (!map.has(p.nombre)) map.set(p.nombre, []);
+      map.get(p.nombre)!.push(p);
+    }
+    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [categoriaFiltro]);
 
   const handleBuscar = () => {
@@ -39,7 +48,7 @@ export default function RealizarPedido() {
       if (existente.cantidad + 1 > p.stockActual) { setError(`Stock insuficiente. Disponible: ${p.stockActual}`); return; }
       setItems(items.map(i => i.producto.codigo === p.codigo ? { ...i, cantidad: i.cantidad + 1, subtotal: (i.cantidad + 1) * i.precioCongelado } : i));
     } else {
-      if (1 > p.stockActual) { setError(`Stock insuficiente para "${p.nombre}".`); return; }
+      if (1 > p.stockActual) { setError(`Stock insuficiente para "${displayName(p)}".`); return; }
       setItems([...items, { producto: p, cantidad: 1, precioCongelado: p.precioVenta, subtotal: p.precioVenta }]);
     }
     setBusqueda(''); setResultados([]);
@@ -61,7 +70,7 @@ export default function RealizarPedido() {
     if (!direccion.trim()) { setError('Ingrese una dirección de entrega.'); return; }
     for (const item of items) {
       const p = productosMock.find(pr => pr.codigo === item.producto.codigo);
-      if (!p || p.stockActual < item.cantidad) { setError(`Stock insuficiente para "${item.producto.nombre}".`); return; }
+      if (!p || p.stockActual < item.cantidad) { setError(`Stock insuficiente para "${displayName(item.producto)}".`); return; }
     }
     for (const item of items) { const p = productosMock.find(pr => pr.codigo === item.producto.codigo); if (p) p.stockActual -= item.cantidad; }
     setMostrarConfirmacion(true);
@@ -81,7 +90,7 @@ export default function RealizarPedido() {
         cliente: user?.nombreReal ?? '—',
         direccion,
         items: items.map(i => ({
-          producto: i.producto.nombre,
+          producto: displayName(i.producto),
           cantidad: i.cantidad,
           precioUnitario: i.precioCongelado,
           subtotal: i.subtotal,
@@ -126,7 +135,7 @@ export default function RealizarPedido() {
             <tbody>
               {items.map(i => (
                 <tr key={i.producto.codigo} className="border-b border-slate-200">
-                  <td className="py-2">{i.producto.nombre}</td>
+                  <td className="py-2">{displayName(i.producto)}</td>
                   <td className="text-center py-2">{i.cantidad}</td>
                   <td className="text-right py-2">${i.precioCongelado.toFixed(2)}</td>
                   <td className="text-right py-2">${i.subtotal.toFixed(2)}</td>
@@ -208,7 +217,7 @@ export default function RealizarPedido() {
         {modo === 'buscar' && (
           <>
             <div className="flex gap-2 mb-4">
-              <input type="text" value={busqueda} onChange={e => setBusqueda(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleBuscar()} placeholder="Buscar producto por nombre o código..." className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
+              <input type="text" value={busqueda} onChange={e => setBusqueda(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleBuscar()} placeholder="Buscar producto por nombre, subcategoría o código..." className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
               <button onClick={handleBuscar} className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"><Search size={16} /> Buscar</button>
             </div>
 
@@ -216,18 +225,18 @@ export default function RealizarPedido() {
               <div className="mb-4 border border-slate-200 rounded-lg overflow-hidden max-h-60 overflow-y-auto">
                 {resultados.map(p => (
                   <div key={p.codigo} className="flex items-center justify-between px-4 py-2.5 hover:bg-slate-50 border-b border-slate-100 last:border-0 cursor-pointer" onClick={() => agregarItem(p)}>
-                    <div><p className="font-medium text-slate-800 text-sm">{p.nombre}</p><p className="text-xs text-slate-500">Stock: {p.stockActual} | Cód: {p.codigo}</p></div>
+                    <div><p className="font-medium text-slate-800 text-sm">{displayName(p)}</p><p className="text-xs text-slate-500">Stock: {p.stockActual} | Cód: {p.codigo}</p></div>
                     <div className="text-right"><p className="font-semibold text-blue-600">${p.precioVenta.toFixed(2)}</p><p className="text-xs text-green-600 flex items-center gap-0.5"><Plus size={12} /> agregar</p></div>
                   </div>
                 ))}
               </div>
             )}
 
-            {!resultados.length && <p className="text-sm text-slate-400 text-center py-4">Busque productos por nombre o código.</p>}
+            {!resultados.length && <p className="text-sm text-slate-400 text-center py-4">Busque productos por nombre, subcategoría o código.</p>}
           </>
         )}
 
-        {/* Catalog mode */}
+        {/* Catalog mode — grouped by family */}
         {modo === 'catalogo' && (
           <div>
             <div className="flex flex-wrap gap-2 mb-4">
@@ -239,35 +248,46 @@ export default function RealizarPedido() {
               ))}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-4">
-              {productosFiltrados.map(p => {
-                const enCarrito = cantidadEnCarrito(p.codigo);
-                const sinStock = p.stockActual <= 0;
-                return (
-                  <div key={p.codigo} className={`border rounded-xl p-4 transition-all ${sinStock ? 'border-slate-200 bg-slate-50 opacity-60' : 'border-slate-200 hover:border-blue-300 hover:shadow-sm'}`}>
-                    <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 mb-2">
-                      <Package size={18} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+              {familias.map(([familia, variantes]) => (
+                <div key={familia} className="border border-slate-200 rounded-xl p-4 hover:border-blue-300 hover:shadow-sm transition-all">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
+                      <Package size={16} />
                     </div>
-                    <h3 className="font-medium text-slate-800 text-sm">{p.nombre}</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">{p.categoria} | Cód: {p.codigo}</p>
-                    <div className="flex items-center justify-between mt-3">
-                      <p className="text-lg font-bold text-blue-600">${p.precioVenta.toFixed(2)}</p>
-                      {sinStock ? (
-                        <span className="text-xs text-red-500 font-medium">Sin stock</span>
-                      ) : (
-                        <button onClick={() => agregarItem(p)}
-                          className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs font-medium">
-                          <Plus size={14} /> {enCarrito > 0 ? `+${enCarrito}` : 'Agregar'}
-                        </button>
-                      )}
-                    </div>
-                    <p className="text-xs text-slate-400 mt-1">Stock: {p.stockActual} uds.</p>
+                    <h3 className="font-semibold text-slate-800 text-sm">{familia}</h3>
                   </div>
-                );
-              })}
+                  <div className="space-y-2">
+                    {variantes.map(p => {
+                      const enCarrito = cantidadEnCarrito(p.codigo);
+                      const sinStock = p.stockActual <= 0;
+                      return (
+                        <div key={p.codigo} className={`flex items-center justify-between rounded-lg px-3 py-2 ${sinStock ? 'opacity-50' : 'bg-slate-50 hover:bg-blue-50 transition-colors'}`}>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-slate-700 truncate">{p.subcategoria}</p>
+                            <p className="text-xs text-slate-400">Stock: {p.stockActual} uds.</p>
+                          </div>
+                          <div className="flex items-center gap-2 ml-2">
+                            <span className="text-sm font-bold text-blue-600 tabular-nums">${p.precioVenta.toFixed(2)}</span>
+                            {sinStock ? (
+                              <span className="text-xs text-red-500 font-medium whitespace-nowrap">Sin stock</span>
+                            ) : (
+                              <button onClick={() => agregarItem(p)}
+                                className="flex items-center gap-0.5 px-2.5 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs font-medium whitespace-nowrap">
+                                <Plus size={12} /> {enCarrito > 0 ? `+${enCarrito}` : 'Agregar'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {variantes.length === 0 && <p className="text-xs text-slate-400 text-center py-2">Sin variantes disponibles</p>}
+                </div>
+              ))}
             </div>
 
-            {productosFiltrados.length === 0 && (
+            {familias.length === 0 && (
               <p className="text-sm text-slate-400 text-center py-4">No hay productos en esta categoría.</p>
             )}
           </div>
@@ -284,7 +304,7 @@ export default function RealizarPedido() {
               <thead><tr className="border-b border-slate-200"><th className="text-left py-2">Producto</th><th className="text-center py-2">Cantidad</th><th className="text-right py-2">P. Unit.</th><th className="text-right py-2">Subtotal</th><th className="w-10"></th></tr></thead>
               <tbody>{items.map(i => (
                 <tr key={i.producto.codigo} className="border-b border-slate-100">
-                  <td className="py-2 text-sm">{i.producto.nombre}</td>
+                  <td className="py-2 text-sm">{displayName(i.producto)}</td>
                   <td className="text-center py-2">
                     <div className="inline-flex items-center gap-1">
                       <button onClick={() => cambiarCantidad(i.producto.codigo, i.cantidad - 1)} className="w-7 h-7 bg-slate-100 rounded hover:bg-slate-200 flex items-center justify-center"><Minus size={14} /></button>

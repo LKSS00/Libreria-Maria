@@ -18,6 +18,7 @@ export interface Proveedor {
 export interface Producto {
   codigo: string;
   nombre: string;
+  subcategoria: string;
   categoria: string;
   precioCosto: number;
   precioVenta: number;

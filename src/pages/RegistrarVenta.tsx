@@ -28,7 +28,7 @@ export default function RegistrarVenta() {
       if (existente.cantidad + 1 > p.stockActual) { setError(`Stock insuficiente. Disponible: ${p.stockActual}`); return; }
       setItems(items.map(i => i.producto.codigo === p.codigo ? { ...i, cantidad: i.cantidad + 1, subtotal: (i.cantidad + 1) * i.precioCongelado } : i));
     } else {
-      if (1 > p.stockActual) { setError(`Stock insuficiente para "${p.nombre}".`); return; }
+      if (1 > p.stockActual) { setError(`Stock insuficiente para "${p.nombre} — ${p.subcategoria}".`); return; }
       setItems([...items, { producto: p, cantidad: 1, precioCongelado: p.precioVenta, subtotal: p.precioVenta }]);
     }
     setBusqueda(''); setResultados([]);
@@ -49,7 +49,7 @@ export default function RegistrarVenta() {
     if (items.length === 0) { setError('Agregue al menos un producto.'); return; }
     for (const item of items) {
       const p = productosMock.find(pr => pr.codigo === item.producto.codigo);
-      if (!p || p.stockActual < item.cantidad) { setError(`Stock insuficiente para "${item.producto.nombre}".`); return; }
+      if (!p || p.stockActual < item.cantidad) { setError(`Stock insuficiente para "${item.producto.nombre} — ${item.producto.subcategoria}".`); return; }
     }
     for (const item of items) { const p = productosMock.find(pr => pr.codigo === item.producto.codigo); if (p) p.stockActual -= item.cantidad; }
     setMostrarComprobante(true);
@@ -66,7 +66,7 @@ export default function RegistrarVenta() {
         numero: nroVenta,
         cliente: user?.nombreReal ?? '—',
         items: items.map(i => ({
-          producto: i.producto.nombre,
+          producto: `${i.producto.nombre} — ${i.producto.subcategoria}`,
           cantidad: i.cantidad,
           precioUnitario: i.precioCongelado,
           subtotal: i.subtotal,
@@ -111,7 +111,7 @@ export default function RegistrarVenta() {
             <tbody>
               {items.map(i => (
                 <tr key={i.producto.codigo} className="border-b border-slate-200">
-                  <td className="py-2">{i.producto.nombre}</td>
+                  <td className="py-2">{i.producto.nombre} — {i.producto.subcategoria}</td>
                   <td className="text-center py-2">{i.cantidad}</td>
                   <td className="text-right py-2">${i.precioCongelado.toFixed(2)}</td>
                   <td className="text-right py-2">${i.subtotal.toFixed(2)}</td>
@@ -163,7 +163,7 @@ export default function RegistrarVenta() {
                 <thead className="bg-slate-50 sticky top-0">
                   <tr><th className="text-left px-3 py-2">N°</th><th className="text-left px-3 py-2">Fecha</th><th className="text-left px-3 py-2">Productos</th><th className="text-right px-3 py-2">Total</th><th className="text-left px-3 py-2">Pago</th></tr>
                 </thead>
-                <tbody>{ventasMock.map(v => (<tr key={v.numero} className="border-t border-slate-100 hover:bg-slate-50"><td className="px-3 py-2 font-mono">{v.numero}</td><td className="px-3 py-2 text-xs">{v.fechaHora.toLocaleString('es-AR')}</td><td className="px-3 py-2">{v.items.map(i => i.producto.nombre).join(', ')}</td><td className="px-3 py-2 text-right font-medium">${v.total.toFixed(2)}</td><td className="px-3 py-2 capitalize">{v.medioPago}</td></tr>))}</tbody>
+                <tbody>{ventasMock.map(v => (<tr key={v.numero} className="border-t border-slate-100 hover:bg-slate-50"><td className="px-3 py-2 font-mono">{v.numero}</td><td className="px-3 py-2 text-xs">{v.fechaHora.toLocaleString('es-AR')}</td><td className="px-3 py-2">{v.items.map(i => `${i.producto.nombre} — ${i.producto.subcategoria}`).join(', ')}</td><td className="px-3 py-2 text-right font-medium">${v.total.toFixed(2)}</td><td className="px-3 py-2 capitalize">{v.medioPago}</td></tr>))}</tbody>
               </table>
             </div>
           </div>
@@ -178,7 +178,7 @@ export default function RegistrarVenta() {
           <div className="mb-4 border border-slate-200 rounded-lg overflow-hidden max-h-48 overflow-y-auto">
             {resultados.map(p => (
               <div key={p.codigo} className="flex items-center justify-between px-4 py-2.5 hover:bg-slate-50 border-b border-slate-100 last:border-0 cursor-pointer" onClick={() => agregarItem(p)}>
-                <div><p className="font-medium text-slate-800 text-sm">{p.nombre}</p><p className="text-xs text-slate-500">Stock: {p.stockActual} | Cód: {p.codigo}</p></div>
+                  <div><p className="font-medium text-slate-800 text-sm">{p.nombre} — {p.subcategoria}</p><p className="text-xs text-slate-500">Stock: {p.stockActual} | Cód: {p.codigo}</p></div>
                 <div className="text-right"><p className="font-semibold text-blue-600">${p.precioVenta.toFixed(2)}</p><p className="text-xs text-green-600 flex items-center gap-0.5"><Plus size={12} /> agregar</p></div>
               </div>
             ))}
@@ -191,7 +191,7 @@ export default function RegistrarVenta() {
               <thead><tr className="border-b border-slate-200"><th className="text-left py-2">Producto</th><th className="text-center py-2">Cantidad</th><th className="text-right py-2">P. Unit.</th><th className="text-right py-2">Subtotal</th><th className="w-10"></th></tr></thead>
               <tbody>{items.map(i => (
                 <tr key={i.producto.codigo} className="border-b border-slate-100">
-                  <td className="py-2 text-sm">{i.producto.nombre}</td>
+                  <td className="py-2 text-sm">{i.producto.nombre} — {i.producto.subcategoria}</td>
                   <td className="text-center py-2">
                     <div className="inline-flex items-center gap-1">
                       <button onClick={() => cambiarCantidad(i.producto.codigo, i.cantidad - 1)} className="w-7 h-7 bg-slate-100 rounded hover:bg-slate-200 flex items-center justify-center"><Minus size={14} /></button>

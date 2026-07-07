@@ -86,7 +86,7 @@ export default function Dashboard() {
             <div className="space-y-1.5">
               {stockBajo.map(p => (
                 <div key={p.codigo} className="flex justify-between text-sm text-red-600">
-                  <span>{p.nombre}</span>
+                  <span>{p.nombre} — {p.subcategoria}</span>
                   <span className="font-medium tabular-nums">{p.stockActual} / {p.stockMinimo} mín.</span>
                 </div>
               ))}

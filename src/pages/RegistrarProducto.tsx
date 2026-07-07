@@ -11,6 +11,7 @@ export default function RegistrarProducto() {
   const [verProductos, setVerProductos] = useState(false);
   const [codigo, setCodigo] = useState('');
   const [nombre, setNombre] = useState('');
+  const [subcategoria, setSubcategoria] = useState('');
   const [categoria, setCategoria] = useState('Escolar');
   const [precioCosto, setPrecioCosto] = useState('');
   const [precioVenta, setPrecioVenta] = useState('');
@@ -29,13 +30,13 @@ export default function RegistrarProducto() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault(); setError(''); setSuccess('');
     if (!proveedorValido) { setError('Debe verificar un proveedor primero.'); return; }
-    if (!codigo || !nombre || !precioCosto || !precioVenta || !stockActual || !stockMinimo) { setError('Complete todos los campos obligatorios.'); return; }
+    if (!codigo || !nombre || !subcategoria || !precioCosto || !precioVenta || !stockActual || !stockMinimo) { setError('Complete todos los campos obligatorios.'); return; }
     if (productosMock.find(p => p.codigo === codigo)) { setError('El código de producto ya existe.'); return; }
     const pc = parseFloat(precioCosto), pv = parseFloat(precioVenta), sa = parseInt(stockActual), sm = parseInt(stockMinimo);
     if (pc <= 0 || pv <= 0 || sa < 0 || sm < 0) { setError('Verifique los valores numéricos.'); return; }
-    productosMock.push({ codigo, nombre, categoria, precioCosto: pc, precioVenta: pv, stockActual: sa, stockMinimo: sm, idProveedor: proveedorValido.id });
-    setSuccess(`Producto "${nombre}" registrado con éxito.`);
-    setCodigo(''); setNombre(''); setCategoria('Escolar'); setPrecioCosto(''); setPrecioVenta(''); setStockActual(''); setStockMinimo(''); setProveedorId(''); setProveedorValido(null);
+    productosMock.push({ codigo, nombre, subcategoria, categoria, precioCosto: pc, precioVenta: pv, stockActual: sa, stockMinimo: sm, idProveedor: proveedorValido.id });
+    setSuccess(`Producto "${nombre} - ${subcategoria}" registrado con éxito.`);
+    setCodigo(''); setNombre(''); setSubcategoria(''); setCategoria('Escolar'); setPrecioCosto(''); setPrecioVenta(''); setStockActual(''); setStockMinimo(''); setProveedorId(''); setProveedorValido(null);
   };
 
   const proveedorNombre = (id: number) => proveedoresMock.find(p => p.id === id)?.nombreEmpresa ?? '—';
@@ -67,13 +68,14 @@ export default function RegistrarProducto() {
             <div className="overflow-x-auto border border-slate-200 rounded-lg max-h-60 overflow-y-auto">
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 sticky top-0">
-                  <tr><th className="text-left px-3 py-2">Código</th><th className="text-left px-3 py-2">Nombre</th><th className="text-left px-3 py-2">Categoría</th><th className="text-right px-3 py-2">P. Venta</th><th className="text-right px-3 py-2">Stock</th><th className="text-left px-3 py-2">Proveedor</th></tr>
+                  <tr><th className="text-left px-3 py-2">Código</th><th className="text-left px-3 py-2">Nombre</th><th className="text-left px-3 py-2">Subcategoría</th><th className="text-left px-3 py-2">Cat.</th><th className="text-right px-3 py-2">P. Venta</th><th className="text-right px-3 py-2">Stock</th><th className="text-left px-3 py-2">Proveedor</th></tr>
                 </thead>
                 <tbody>
                   {productosMock.map(p => (
                     <tr key={p.codigo} className="border-t border-slate-100 hover:bg-slate-50">
                       <td className="px-3 py-2 font-mono text-xs">{p.codigo}</td>
                       <td className="px-3 py-2">{p.nombre}</td>
+                      <td className="px-3 py-2 text-xs text-slate-600">{p.subcategoria}</td>
                       <td className="px-3 py-2">{p.categoria}</td>
                       <td className="px-3 py-2 text-right">${p.precioVenta.toFixed(2)}</td>
                       <td className={`px-3 py-2 text-right ${p.stockActual <= p.stockMinimo ? 'text-red-600 font-medium' : ''}`}>{p.stockActual}</td>
@@ -106,7 +108,11 @@ export default function RegistrarProducto() {
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Nombre <span className="text-red-500">*</span></label>
-              <input type="text" value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Nombre del producto" disabled={!proveedorValido} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-slate-100" />
+              <input type="text" value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Ej: Pegamento Voligoma" disabled={!proveedorValido} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-slate-100" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Subcategoría <span className="text-red-500">*</span></label>
+              <input type="text" value={subcategoria} onChange={e => setSubcategoria(e.target.value)} placeholder="Ej: 50ml, azul, 48 hojas" disabled={!proveedorValido} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-slate-100" />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Categoría <span className="text-red-500">*</span></label>
@@ -136,7 +142,7 @@ export default function RegistrarProducto() {
             <button type="submit" disabled={!proveedorValido} className="flex items-center gap-1.5 px-6 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed text-sm">
               <Save size={16} /> Guardar Producto
             </button>
-            <button type="button" onClick={() => { setCodigo(''); setNombre(''); setCategoria('Escolar'); setPrecioCosto(''); setPrecioVenta(''); setStockActual(''); setStockMinimo(''); setProveedorId(''); setProveedorValido(null); setError(''); setSuccess(''); }}
+            <button type="button" onClick={() => { setCodigo(''); setNombre(''); setSubcategoria(''); setCategoria('Escolar'); setPrecioCosto(''); setPrecioVenta(''); setStockActual(''); setStockMinimo(''); setProveedorId(''); setProveedorValido(null); setError(''); setSuccess(''); }}
               className="flex items-center gap-1.5 px-6 py-2.5 border border-slate-300 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-colors text-sm">
               <X size={16} /> Cancelar
             </button>
