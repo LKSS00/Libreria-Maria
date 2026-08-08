@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import type { Producto, DetalleVenta } from '../types';
 import { Search, ShoppingCart, Plus, Minus, Trash2, CheckCircle, History, MapPin, BookOpen, Package, Printer, Download } from 'lucide-react';
 import { generarPDF, imprimirComprobante } from '../utils/pdfComprobante';
+import { useToast } from '../components/Toast';
 
 function displayName(p: Producto) {
   return `${p.nombre} — ${p.subcategoria}`;
@@ -11,6 +12,7 @@ function displayName(p: Producto) {
 
 export default function RealizarPedido() {
   const { user } = useAuth();
+  const { error: toastError } = useToast();
   const [modo, setModo] = useState<'buscar' | 'catalogo'>('catalogo');
   const [busqueda, setBusqueda] = useState('');
   const [resultados, setResultados] = useState<Producto[]>([]);
@@ -20,6 +22,11 @@ export default function RealizarPedido() {
   const [error, setError] = useState('');
   const [verHistorial, setVerHistorial] = useState(false);
   const [categoriaFiltro, setCategoriaFiltro] = useState('Todas');
+
+  const mostrarError = (msg: string) => {
+    setError(msg);
+    toastError(msg);
+  };
 
   const categorias = useMemo(() => {
     const cats = new Set(productosMock.map(p => p.categoria));
@@ -45,10 +52,10 @@ export default function RealizarPedido() {
     setError('');
     const existente = items.find(i => i.producto.codigo === p.codigo);
     if (existente) {
-      if (existente.cantidad + 1 > p.stockActual) { setError(`Stock insuficiente. Disponible: ${p.stockActual}`); return; }
+      if (existente.cantidad + 1 > p.stockActual) { mostrarError(`Stock insuficiente. Disponible: ${p.stockActual}`); return; }
       setItems(items.map(i => i.producto.codigo === p.codigo ? { ...i, cantidad: i.cantidad + 1, subtotal: (i.cantidad + 1) * i.precioCongelado } : i));
     } else {
-      if (1 > p.stockActual) { setError(`Stock insuficiente para "${displayName(p)}".`); return; }
+      if (1 > p.stockActual) { mostrarError(`Stock insuficiente para "${displayName(p)}".`); return; }
       setItems([...items, { producto: p, cantidad: 1, precioCongelado: p.precioVenta, subtotal: p.precioVenta }]);
     }
     setBusqueda(''); setResultados([]);
@@ -58,7 +65,7 @@ export default function RealizarPedido() {
     setError('');
     if (nuevaCant < 1) { setItems(items.filter(i => i.producto.codigo !== codigo)); return; }
     const p = items.find(i => i.producto.codigo === codigo);
-    if (p && nuevaCant > p.producto.stockActual) { setError(`Stock insuficiente. Máximo: ${p.producto.stockActual}`); return; }
+    if (p && nuevaCant > p.producto.stockActual) { mostrarError(`Stock insuficiente. Máximo: ${p.producto.stockActual}`); return; }
     setItems(items.map(i => i.producto.codigo === codigo ? { ...i, cantidad: nuevaCant, subtotal: nuevaCant * i.precioCongelado } : i));
   };
 
@@ -66,11 +73,11 @@ export default function RealizarPedido() {
 
   const confirmarPedido = () => {
     setError('');
-    if (items.length === 0) { setError('Agregue al menos un producto.'); return; }
-    if (!direccion.trim()) { setError('Ingrese una dirección de entrega.'); return; }
+    if (items.length === 0) { mostrarError('Agregue al menos un producto.'); return; }
+    if (!direccion.trim()) { mostrarError('Ingrese una dirección de entrega.'); return; }
     for (const item of items) {
       const p = productosMock.find(pr => pr.codigo === item.producto.codigo);
-      if (!p || p.stockActual < item.cantidad) { setError(`Stock insuficiente para "${displayName(item.producto)}".`); return; }
+      if (!p || p.stockActual < item.cantidad) { mostrarError(`Stock insuficiente para "${displayName(item.producto)}".`); return; }
     }
     for (const item of items) { const p = productosMock.find(pr => pr.codigo === item.producto.codigo); if (p) p.stockActual -= item.cantidad; }
     setMostrarConfirmacion(true);

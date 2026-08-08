@@ -2,21 +2,25 @@ import { useState } from 'react';
 import { productosMock, buscarProductos, movimientosStockMock } from '../data/mockData';
 import { useAuth } from '../context/AuthContext';
 import type { Producto, MovimientoStock } from '../types';
-import { Search, ClipboardList, Plus, Minus, CheckCircle, History, Printer, Download, ArrowUp, ArrowDown } from 'lucide-react';
+import { Search, ClipboardList, Plus, Minus, CheckCircle, History, Printer, Download, AlertTriangle } from 'lucide-react';
 import { generarPDF, imprimirComprobante } from '../utils/pdfComprobante';
+import { useToast } from '../components/Toast';
+import { FormField, TextInput } from '../components/FormField';
 
 export default function AjustarStock() {
   const { user } = useAuth();
+  const { success: toastSuccess, error: toastError } = useToast();
   const [busqueda, setBusqueda] = useState('');
   const [resultados, setResultados] = useState<Producto[]>([]);
   const [seleccionado, setSeleccionado] = useState<Producto | null>(null);
   const [tipo, setTipo] = useState<'ingreso' | 'egreso'>('ingreso');
   const [cantidad, setCantidad] = useState('');
   const [motivo, setMotivo] = useState('');
-  const [error, setError] = useState('');
+  const [errores, setErrores] = useState<Record<string, string>>({});
+  const [stockError, setStockError] = useState('');
   const [verMovimientos, setVerMovimientos] = useState(false);
-  const [mostrarConfirmacion, setMostrarConfirmacion] = useState(false);
   const [ultimoAjuste, setUltimoAjuste] = useState<{
+    id: number;
     producto: Producto;
     tipo: 'ingreso' | 'egreso';
     cantidad: number;
@@ -34,17 +38,35 @@ export default function AjustarStock() {
     setSeleccionado(p);
     setResultados([]);
     setBusqueda('');
-    setError('');
+    setStockError('');
+  };
+
+  const validarCampos = (): boolean => {
+    const nuevos: Record<string, string> = {};
+    if (!seleccionado) nuevos.producto = 'Seleccione un producto.';
+    if (!cantidad || parseInt(cantidad) < 1) nuevos.cantidad = 'Ingrese una cantidad válida.';
+    if (!motivo.trim()) nuevos.motivo = 'Indique el motivo del ajuste.';
+    setErrores(nuevos);
+    return Object.keys(nuevos).length === 0;
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setStockError('');
+
+    if (!validarCampos()) {
+      toastError('Complete los campos obligatorios marcados en rojo.');
+      return;
+    }
+
+    if (!seleccionado) return;
     const cant = parseInt(cantidad);
-    if (!seleccionado) { setError('Seleccione un producto.'); return; }
-    if (!cant || cant < 1) { setError('Ingrese una cantidad válida.'); return; }
-    if (!motivo.trim()) { setError('Indique el motivo del ajuste.'); return; }
-    if (tipo === 'egreso' && cant > seleccionado.stockActual) { setError(`Stock insuficiente. Actual: ${seleccionado.stockActual}`); return; }
+
+    if (tipo === 'egreso' && cant > seleccionado.stockActual) {
+      setStockError(`Stock insuficiente para realizar el ajuste. Disponible: ${seleccionado.stockActual}`);
+      toastError(`Stock insuficiente para realizar el ajuste. Disponible: ${seleccionado.stockActual}`);
+      return;
+    }
 
     const p = productosMock.find(pr => pr.codigo === seleccionado.codigo);
     if (!p) return;
@@ -52,7 +74,7 @@ export default function AjustarStock() {
     const diferencia = tipo === 'ingreso' ? cant : -cant;
     p.stockActual += diferencia;
 
-    movimientosStockMock.push({
+    const nuevoMovimiento: MovimientoStock = {
       id: movimientosStockMock.length + 1,
       idProducto: p.codigo,
       cantidadAnterior,
@@ -60,103 +82,43 @@ export default function AjustarStock() {
       motivo: motivo.trim(),
       idUsuario: user?.id ?? 0,
       fecha: new Date(),
-    });
+    };
+    movimientosStockMock.push(nuevoMovimiento);
 
-    setUltimoAjuste({ producto: p, tipo, cantidad: cant, motivo: motivo.trim(), cantidadAnterior, cantidadNueva: p.stockActual });
-    setMostrarConfirmacion(true);
+    setUltimoAjuste({ id: nuevoMovimiento.id, producto: p, tipo, cantidad: cant, motivo: motivo.trim(), cantidadAnterior, cantidadNueva: p.stockActual });
+    setVerMovimientos(true);
     setCantidad('');
     setMotivo('');
+    setErrores({});
+    setSeleccionado(null);
+    toastSuccess('Ajuste registrado correctamente');
   };
 
   const nuevoAjuste = () => {
-    setSeleccionado(null); setCantidad(''); setMotivo(''); setTipo('ingreso'); setError(''); setMostrarConfirmacion(false); setUltimoAjuste(null);
+    setSeleccionado(null); setCantidad(''); setMotivo(''); setTipo('ingreso'); setErrores({}); setStockError(''); setUltimoAjuste(null);
   };
 
   const productoPorCodigo = (codigo: string) => productosMock.find(p => p.codigo === codigo);
 
-  if (mostrarConfirmacion && ultimoAjuste) {
-    const nroAjuste = movimientosStockMock.length;
-    const handleDownloadPDF = () => {
-      generarPDF({
-        titulo: 'COMPROBANTE DE AJUSTE DE STOCK',
-        numero: nroAjuste,
-        cliente: user?.nombreReal ?? '—',
-        items: [{
-          producto: `${ultimoAjuste.producto.nombre} (${ultimoAjuste.tipo === 'ingreso' ? 'Ingreso' : 'Egreso'})`,
-          cantidad: ultimoAjuste.cantidad,
-          precioUnitario: 0,
-          subtotal: 0,
-        }],
-        total: 0,
-        fecha: new Date(),
-        etiquetaCliente: 'Responsable',
-      });
-    };
+  const handleDownloadPDF = () => {
+    if (!ultimoAjuste) return;
+    generarPDF({
+      titulo: 'COMPROBANTE DE AJUSTE DE STOCK',
+      numero: ultimoAjuste.id,
+      cliente: user?.nombreReal ?? '—',
+      items: [{
+        producto: `${ultimoAjuste.producto.nombre} — ${ultimoAjuste.producto.subcategoria} (${ultimoAjuste.tipo === 'ingreso' ? 'Ingreso' : 'Egreso'})`,
+        cantidad: ultimoAjuste.cantidad,
+        precioUnitario: 0,
+        subtotal: 0,
+      }],
+      total: 0,
+      fecha: new Date(),
+      etiquetaCliente: 'Responsable',
+    });
+  };
 
-    return (
-      <div className="max-w-xl mx-auto">
-        <div id="comprobante-print" className="bg-white rounded-xl border border-slate-200 p-6">
-          <div className="text-center mb-6">
-            <div className="text-3xl font-bold text-slate-800" style={{ fontFamily: "'Times New Roman', serif" }}>Librería María</div>
-            <p className="text-xs text-slate-500 mt-1">Av. 9 de Julio 1200 — Apóstoles, Misiones</p>
-            <p className="text-xs text-slate-500">Tel: xxx | xxx@gmail.com</p>
-            <hr className="my-3 border-t-2 border-slate-800" />
-            <h2 className="text-lg font-bold text-slate-800 tracking-wide uppercase">Comprobante de Ajuste de Stock</h2>
-          </div>
-          <div className="text-sm space-y-1 mb-4 pb-3 border-b border-slate-300">
-            <div className="flex justify-between">
-              <span><strong>N° Ajuste:</strong> {nroAjuste}</span>
-              <span><strong>Fecha:</strong> {new Date().toLocaleDateString('es-AR')}</span>
-            </div>
-            <div className="flex justify-between">
-              <span><strong>Responsable:</strong> {user?.nombreReal}</span>
-              <span><strong>Hora:</strong> {new Date().toLocaleTimeString('es-AR')}</span>
-            </div>
-          </div>
-          <table className="w-full text-sm mb-4">
-            <thead>
-              <tr className="border-b-2 border-slate-800">
-                <th className="text-left py-2 text-xs uppercase tracking-wide">Producto</th>
-                <th className="text-center py-2 text-xs uppercase tracking-wide">Tipo</th>
-                <th className="text-right py-2 text-xs uppercase tracking-wide">Antes</th>
-                <th className="text-right py-2 text-xs uppercase tracking-wide">Cant.</th>
-                <th className="text-right py-2 text-xs uppercase tracking-wide">Después</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-b border-slate-200">
-                <td className="py-2">{ultimoAjuste.producto.nombre} — {ultimoAjuste.producto.subcategoria}</td>
-                <td className="text-center py-2">
-                  <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${ultimoAjuste.tipo === 'ingreso' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                    {ultimoAjuste.tipo === 'ingreso' ? <ArrowUp size={12} /> : <ArrowDown size={12} />} {ultimoAjuste.tipo}
-                  </span>
-                </td>
-                <td className="text-right py-2 tabular-nums">{ultimoAjuste.cantidadAnterior}</td>
-                <td className="text-right py-2 tabular-nums font-medium">{ultimoAjuste.cantidad}</td>
-                <td className="text-right py-2 tabular-nums font-bold">{ultimoAjuste.cantidadNueva}</td>
-              </tr>
-            </tbody>
-          </table>
-          <p className="text-sm mb-4"><strong>Motivo:</strong> {ultimoAjuste.motivo}</p>
-          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm mb-4 flex items-center gap-2 justify-center no-print"><CheckCircle size={16} /> Stock actualizado correctamente.</div>
-          <div className="flex flex-col sm:flex-row gap-3 no-print">
-            <button onClick={handleDownloadPDF} className="flex items-center justify-center gap-1.5 flex-1 px-4 py-2.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors text-sm">
-              <Download size={16} /> Descargar PDF
-            </button>
-            <button onClick={imprimirComprobante} className="flex items-center justify-center gap-1.5 flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors text-sm">
-              <Printer size={16} /> Imprimir
-            </button>
-            <button onClick={nuevoAjuste} className="flex items-center justify-center gap-1.5 flex-1 px-4 py-2.5 border border-slate-300 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-colors text-sm">
-              Nuevo Ajuste
-            </button>
-          </div>
-          <div className="text-center text-xs text-slate-400 mt-4 pt-3 border-t border-slate-200 no-print">
-            <p>Contrato: ajustarStock(idProducto, cantidad, tipo, motivo, idResponsable) — UC-10</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const movimientosOrdenados = [...movimientosStockMock].reverse();
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -172,6 +134,27 @@ export default function AjustarStock() {
           </button>
         </div>
 
+        {ultimoAjuste && (
+          <div className="mb-5 bg-green-50 border border-green-200 rounded-xl p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-green-700">
+                <CheckCircle size={18} />
+                <p className="text-sm font-medium">
+                  Ajuste registrado correctamente — <strong>{ultimoAjuste.producto.nombre} — {ultimoAjuste.producto.subcategoria}</strong>
+                </p>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <button onClick={handleDownloadPDF} className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-xs font-medium">
+                  <Download size={14} /> PDF
+                </button>
+                <button onClick={imprimirComprobante} className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs font-medium">
+                  <Printer size={14} /> Imprimir
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {verMovimientos && (
           <div className="mb-6">
             <h3 className="text-sm font-semibold text-slate-700 mb-2">Movimientos registrados ({movimientosStockMock.length})</h3>
@@ -180,18 +163,21 @@ export default function AjustarStock() {
                 <thead className="bg-slate-50 sticky top-0">
                   <tr><th className="text-left px-3 py-2">Fecha</th><th className="text-left px-3 py-2">Producto</th><th className="text-right px-3 py-2">Anterior</th><th className="text-right px-3 py-2">Nuevo</th><th className="text-left px-3 py-2">Motivo</th></tr>
                 </thead>
-                <tbody>{movimientosStockMock.map((m: MovimientoStock) => {
-                  const prod = productoPorCodigo(m.idProducto);
-                  return (
-                    <tr key={m.id} className="border-t border-slate-100 hover:bg-slate-50">
-                      <td className="px-3 py-2 text-xs">{m.fecha.toLocaleString('es-AR')}</td>
-                      <td className="px-3 py-2">{prod?.nombre ?? m.idProducto}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{m.cantidadAnterior}</td>
-                      <td className="px-3 py-2 text-right tabular-nums font-medium">{m.cantidadNueva}</td>
-                      <td className="px-3 py-2 text-xs text-slate-500">{m.motivo}</td>
-                    </tr>
-                  );
-                })}</tbody>
+                <tbody>
+                  {movimientosOrdenados.map((m: MovimientoStock) => {
+                    const prod = productoPorCodigo(m.idProducto);
+                    const esNuevo = ultimoAjuste?.id === m.id;
+                    return (
+                      <tr key={m.id} className={`border-t border-slate-100 hover:bg-slate-50 ${esNuevo ? 'bg-green-50 font-medium' : ''}`}>
+                        <td className="px-3 py-2 text-xs">{m.fecha.toLocaleString('es-AR')}</td>
+                        <td className="px-3 py-2">{prod?.nombre ?? m.idProducto}{esNuevo && <span className="ml-1 text-xs text-green-600">(nuevo)</span>}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{m.cantidadAnterior}</td>
+                        <td className="px-3 py-2 text-right tabular-nums font-medium">{m.cantidadNueva}</td>
+                        <td className="px-3 py-2 text-xs text-slate-500">{m.motivo}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
               </table>
             </div>
           </div>
@@ -201,7 +187,7 @@ export default function AjustarStock() {
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Buscar producto</label>
             <div className="flex gap-2 mb-4">
-              <input type="text" value={busqueda} onChange={e => setBusqueda(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleBuscar()} placeholder="Buscar por nombre o código..." className="flex-1 max-w-md px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
+              <input type="text" value={busqueda} onChange={e => setBusqueda(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleBuscar()} placeholder="Buscar por nombre, subcategoría o código..." className="flex-1 max-w-md px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
               <button onClick={handleBuscar} className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"><Search size={16} /> Buscar</button>
             </div>
             {resultados.length > 0 && (
@@ -222,15 +208,27 @@ export default function AjustarStock() {
         )}
 
         {seleccionado && (
-          <form onSubmit={handleSubmit}>
-            <div className="mb-4 p-4 bg-slate-50 border border-slate-200 rounded-lg">
-              <p className="text-sm font-medium text-slate-800 mb-2">Producto seleccionado: <strong>{seleccionado.nombre} — {seleccionado.subcategoria}</strong></p>
-              <p className="text-xs text-slate-500">Stock actual: <strong className={seleccionado.stockActual <= seleccionado.stockMinimo ? 'text-red-600' : ''}>{seleccionado.stockActual}</strong> | Mínimo: {seleccionado.stockMinimo}</p>
+          <form onSubmit={handleSubmit} noValidate>
+            {/* Alerta de stock mínimo: card informativa con color dinámico */}
+            <div className={`mb-4 p-4 rounded-lg border ${seleccionado.stockActual <= seleccionado.stockMinimo ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200'}`}>
+              <p className="text-sm font-medium text-slate-800 mb-1">Producto seleccionado: <strong>{seleccionado.nombre} — {seleccionado.subcategoria}</strong></p>
+              <div className="flex gap-6 text-sm mt-1">
+                <span className="text-slate-500">Stock actual:
+                  <strong className={`ml-1 tabular-nums ${seleccionado.stockActual <= seleccionado.stockMinimo ? 'text-red-600' : 'text-slate-800'}`}>{seleccionado.stockActual}</strong>
+                </span>
+                <span className="text-slate-500">Mínimo:
+                  <strong className="ml-1 tabular-nums text-slate-800">{seleccionado.stockMinimo}</strong>
+                </span>
+                {seleccionado.stockActual <= seleccionado.stockMinimo && (
+                  <span className="flex items-center gap-1 text-red-600 font-medium">
+                    <AlertTriangle size={14} /> Por debajo del mínimo
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Tipo de ajuste <span className="text-red-500">*</span></label>
+              <FormField label="Tipo de ajuste" required>
                 <div className="flex gap-4 mt-1">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input type="radio" name="tipo" value="ingreso" checked={tipo === 'ingreso'} onChange={() => setTipo('ingreso')} className="accent-blue-600" />
@@ -241,29 +239,48 @@ export default function AjustarStock() {
                     <span className="text-sm flex items-center gap-1"><Minus size={14} className="text-red-600" /> Egreso</span>
                   </label>
                 </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Cantidad <span className="text-red-500">*</span></label>
-                <input type="number" value={cantidad} onChange={e => setCantidad(e.target.value)} placeholder="0" min="1" className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
-              </div>
+              </FormField>
+              <FormField label="Cantidad" required error={errores.cantidad} htmlFor="cantidad">
+                <TextInput id="cantidad" type="number" value={cantidad} onChange={e => setCantidad(e.target.value)} placeholder="0" min="1" error={errores.cantidad} />
+              </FormField>
             </div>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-slate-700 mb-1">Motivo del ajuste <span className="text-red-500">*</span></label>
-              <textarea value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="Ej: Rotura de stock, error de inventario, devolución..." rows={2} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm resize-none" />
+              <FormField label="Motivo del ajuste" required error={errores.motivo} htmlFor="motivo">
+                <textarea
+                  id="motivo"
+                  value={motivo}
+                  onChange={e => setMotivo(e.target.value)}
+                  placeholder="Ej: Rotura de stock, error de inventario, devolución..."
+                  rows={2}
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm resize-none ${errores.motivo ? 'border-red-500 bg-red-50 focus:ring-red-400' : 'border-slate-300'}`}
+                />
+              </FormField>
             </div>
 
-            {error && <div className="mb-4 bg-red-50 text-red-600 px-4 py-2 rounded-lg text-sm">{error}</div>}
+            {stockError && (
+              <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
+                <AlertTriangle size={16} /> {stockError}
+              </div>
+            )}
 
             <div className="flex gap-3">
               <button type="submit" className="flex items-center gap-1.5 px-6 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors text-sm">
                 <CheckCircle size={16} /> Aplicar Ajuste
               </button>
-              <button type="button" onClick={() => { setSeleccionado(null); setError(''); }} className="px-4 py-2.5 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors text-sm">
+              <button type="button" onClick={nuevoAjuste} className="px-4 py-2.5 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors text-sm">
                 Cancelar
               </button>
             </div>
           </form>
+        )}
+
+        {ultimoAjuste && (
+          <div className="mt-4 text-center">
+            <button onClick={nuevoAjuste} className="text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors">
+              + Realizar otro ajuste
+            </button>
+          </div>
         )}
       </div>
       <div className="text-xs text-slate-400 text-center font-mono">Contrato: ajustarStock(idProducto, cantidad, tipo, motivo, idResponsable) — UC-10</div>
