@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { proveedoresMock, productosMock } from '../data/mockData';
 import type { Proveedor, Producto } from '../types';
-import { Package, Search, Save, X, Eye, EyeOff } from 'lucide-react';
+import { Package, Search, Save, X, CheckCircle2, Eye } from 'lucide-react';
 import { useToast } from '../components/Toast';
 import { FormField, TextInput, SelectInput } from '../components/FormField';
 
@@ -29,7 +29,6 @@ export default function RegistrarProducto() {
   const { success, error } = useToast();
   const [proveedorId, setProveedorId] = useState('');
   const [proveedorValido, setProveedorValido] = useState<Proveedor | null>(null);
-  const [verProductos, setVerProductos] = useState(false);
 
   const [codigo, setCodigo] = useState('');
   const [nombre, setNombre] = useState('');
@@ -133,47 +132,20 @@ export default function RegistrarProducto() {
   const proveedorNombre = (id: number) => proveedoresMock.find(p => p.id === id)?.nombreEmpresa ?? '—';
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
-        <div className="flex items-center justify-between mb-4">
+    <div className="h-full grid grid-cols-12 gap-5">
+      {/* Panel izquierdo — Formulario */}
+      <section className="col-span-5 bg-white rounded-xl border border-slate-200 p-5 flex flex-col min-h-0">
+        <header className="flex items-center justify-between mb-4 shrink-0">
           <div className="flex items-center gap-2">
-            <Package size={20} className="text-blue-600" />
-            <h2 className="text-lg font-semibold text-slate-800">Registrar Nuevo Producto</h2>
+            <Package size={22} className="text-blue-600" />
+            <h2 className="text-xl font-semibold text-slate-800">Registrar Nuevo Producto</h2>
           </div>
-          <button onClick={() => setVerProductos(!verProductos)}
-            className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 transition-colors">
-            {verProductos ? <EyeOff size={16} /> : <Eye size={16} />}
-            {verProductos ? 'Ocultar catálogo' : 'Ver catálogo'}
-          </button>
-        </div>
-
-        {verProductos && (
-          <div className="mb-6">
-            <h3 className="text-sm font-semibold text-slate-700 mb-2">Productos existentes ({productosMock.length})</h3>
-            <div className="overflow-x-auto border border-slate-200 rounded-lg max-h-60 overflow-y-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 sticky top-0">
-                  <tr><th className="text-left px-3 py-2">Código</th><th className="text-left px-3 py-2">Nombre</th><th className="text-left px-3 py-2">Subcategoría</th><th className="text-left px-3 py-2">Cat.</th><th className="text-right px-3 py-2">P. Venta</th><th className="text-right px-3 py-2">Stock</th><th className="text-left px-3 py-2">Proveedor</th></tr>
-                </thead>
-                <tbody>
-                  {productosMock.map(p => (
-                    <tr key={p.codigo} className="border-t border-slate-100 hover:bg-slate-50">
-                      <td className="px-3 py-2 font-mono text-xs">{p.codigo}</td>
-                      <td className="px-3 py-2">{p.nombre}</td>
-                      <td className="px-3 py-2 text-xs text-slate-600">{p.subcategoria}</td>
-                      <td className="px-3 py-2">{p.categoria}</td>
-                      <td className="px-3 py-2 text-right">${p.precioVenta.toFixed(2)}</td>
-                      <td className={`px-3 py-2 text-right ${p.stockActual <= p.stockMinimo ? 'text-red-600 font-medium' : ''}`}>{p.stockActual}</td>
-                      <td className="px-3 py-2">{proveedorNombre(p.idProveedor)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          <div className="text-sm text-slate-400 text-right">
+            Contrato: registrarProducto(codigo, nombre, subcategoria,<br />categoria, precioCosto, precioVenta, stockActual, stockMinimo, idProveedor) — UC-03
           </div>
-        )}
+        </header>
 
-        <div className="mb-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
+        <div className="mb-5 p-4 bg-slate-50 rounded-lg border border-slate-200 shrink-0">
           <FormField label="Verificar Proveedor" required error={proveedorError} htmlFor="proveedorId">
             <div className="flex gap-2">
               <TextInput
@@ -182,24 +154,24 @@ export default function RegistrarProducto() {
                 value={proveedorId}
                 onChange={e => { setProveedorId(e.target.value); setProveedorError(''); }}
                 placeholder="ID del proveedor"
-                className="flex-1 max-w-xs"
+                className="flex-1"
                 error={proveedorError || undefined}
               />
-              <button type="button" onClick={verificarProveedor} className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm">
-                <Search size={16} /> Verificar
+              <button type="button" onClick={verificarProveedor} className="flex items-center gap-1.5 px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-base shrink-0">
+                <Search size={18} /> Verificar
               </button>
             </div>
           </FormField>
           {proveedorValido && (
-            <div className="mt-2 text-sm text-green-700 bg-green-50 px-3 py-2 rounded flex items-center gap-1.5">
-              <Search size={14} /> Proveedor válido: <strong>{proveedorValido.nombreEmpresa}</strong>
+            <div className="mt-2.5 text-base text-green-700 bg-green-50 px-3.5 py-2.5 rounded flex items-center gap-2">
+              <CheckCircle2 size={18} /> Proveedor válido: <strong>{proveedorValido.nombreEmpresa}</strong>
             </div>
           )}
-          <div className="mt-2 text-xs text-slate-400">IDs: 1=Distribuidora Norte, 2=Faber-Castell, 3=Papelera del Valle, 4=Maxim Oficinas</div>
+          <div className="mt-2.5 text-sm text-slate-400">IDs: 1=Distribuidora Norte, 2=Faber-Castell, 3=Papelera del Valle, 4=Maxim Oficinas</div>
         </div>
 
-        <form onSubmit={handleSubmit} noValidate>
-          <div className="grid grid-cols-2 gap-4">
+        <form onSubmit={handleSubmit} noValidate className="flex flex-col min-h-0 flex-1">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-4 min-h-0 overflow-y-auto">
             <FormField label="Código" required error={errores.codigo} htmlFor="codigo">
               <TextInput id="codigo" value={codigo} onChange={e => setCodigo(e.target.value)} placeholder="Código de barras" disabled={!proveedorValido} error={errores.codigo} />
             </FormField>
@@ -228,17 +200,53 @@ export default function RegistrarProducto() {
             </FormField>
           </div>
 
-          <div className="flex gap-3 pt-4">
-            <button type="submit" disabled={!proveedorValido} className="flex items-center gap-1.5 px-6 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed text-sm">
-              <Save size={16} /> Guardar Producto
+          <div className="flex gap-3 pt-5 mt-4 border-t border-slate-200 shrink-0">
+            <button type="submit" disabled={!proveedorValido} className="flex items-center gap-1.5 px-7 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed text-base">
+              <Save size={20} /> Guardar Producto
             </button>
-            <button type="button" onClick={cancelar} className="flex items-center gap-1.5 px-6 py-2.5 border border-slate-300 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-colors text-sm">
-              <X size={16} /> Cancelar
+            <button type="button" onClick={cancelar} className="flex items-center gap-1.5 px-7 py-3 border border-slate-300 text-slate-700 rounded-lg font-semibold hover:bg-slate-50 transition-colors text-base">
+              <X size={20} /> Cancelar
             </button>
           </div>
         </form>
-      </div>
-      <div className="text-xs text-slate-400 text-center font-mono">Contrato: registrarProducto(codigo, nombre, subcategoria, categoria, precioCosto, precioVenta, stockActual, stockMinimo, idProveedor) — UC-03</div>
+      </section>
+
+      {/* Panel derecho — Catálogo */}
+      <section className="col-span-7 bg-white rounded-xl border border-slate-200 p-5 flex flex-col min-h-0">
+        <header className="flex items-center justify-between mb-4 shrink-0">
+          <div className="flex items-center gap-2">
+            <Eye size={22} className="text-purple-600" />
+            <h2 className="text-xl font-semibold text-slate-800">Catálogo de productos</h2>
+          </div>
+          <span className="text-sm text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full">{productosMock.length} productos</span>
+        </header>
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <table className="w-full text-base">
+            <thead className="sticky top-0 bg-white">
+              <tr className="border-b-2 border-slate-200 text-left">
+                <th className="py-2 pr-2">Código</th>
+                <th className="py-2 pr-2">Nombre</th>
+                <th className="py-2 pr-2">Subcategoría</th>
+                <th className="py-2 pr-2">P. Venta</th>
+                <th className="py-2 pr-2 text-right">Stock</th>
+                <th className="py-2">Proveedor</th>
+              </tr>
+            </thead>
+            <tbody>
+              {productosMock.map(p => (
+                <tr key={p.codigo} className="border-b border-slate-100 hover:bg-slate-50">
+                  <td className="py-1.5 pr-2 font-mono text-sm">{p.codigo}</td>
+                  <td className="py-1.5 pr-2 font-medium">{p.nombre}</td>
+                  <td className="py-1.5 pr-2 text-sm text-slate-600">{p.subcategoria}</td>
+                  <td className="py-1.5 pr-2 tabular-nums">${p.precioVenta.toFixed(2)}</td>
+                  <td className={`py-1.5 pr-2 text-right tabular-nums ${p.stockActual <= p.stockMinimo ? 'text-red-600 font-semibold' : ''}`}>{p.stockActual}</td>
+                  <td className="py-1.5 text-sm text-slate-500">{proveedorNombre(p.idProveedor)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   );
 }

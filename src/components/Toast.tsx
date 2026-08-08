@@ -49,11 +49,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           const s = styles[t.type];
           const Icon = s.Icon;
           return (
-            <div key={t.id} className={`bg-white border ${s.border} rounded-xl shadow-lg p-3 flex items-start gap-3 animate-[slideIn_.2s_ease-out]`}>
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${s.iconBg} ${s.iconColor}`}>
-                <Icon size={18} />
+            <div key={t.id} className={`bg-white border ${s.border} rounded-xl shadow-lg p-3.5 flex items-start gap-3 animate-[slideIn_.2s_ease-out]`}>
+              <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${s.iconBg} ${s.iconColor}`}>
+                <Icon size={20} />
               </div>
-              <p className="flex-1 text-sm text-slate-700 pt-1">{t.message}</p>
+              <p className="flex-1 text-base text-slate-700 pt-1.5">{t.message}</p>
               <button onClick={() => remove(t.id)} className="text-slate-300 hover:text-slate-500 transition-colors p-0.5" aria-label="Cerrar">
                 <X size={14} />
               </button>
