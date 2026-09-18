@@ -1,13 +1,38 @@
 import { useState, useMemo } from 'react';
-import { productosMock, buscarProductos, pedidosMock } from '../data/mockData';
+import { productosMock, buscarProductos, pedidosMock, stockDisponible } from '../data/mockData';
 import { useAuth } from '../context/AuthContext';
-import type { Producto, DetalleVenta } from '../types';
-import { Search, ShoppingCart, Plus, Minus, Trash2, CheckCircle, History, MapPin, BookOpen, Package, Printer, Download } from 'lucide-react';
+import type { Producto, ItemCarrito, Pedido } from '../types';
+import { Search, ShoppingCart, Plus, Minus, Trash2, CheckCircle, History, BookOpen, Package, Printer, Download, User, Phone, IdCard } from 'lucide-react';
 import { generarPDF, imprimirComprobante } from '../utils/pdfComprobante';
 import { useToast } from '../components/Toast';
 
 function displayName(p: Producto) {
   return `${p.nombre} — ${p.subcategoria}`;
+}
+
+export function realizarPedido(
+  nombreCliente: string,
+  contacto: string,
+  dni: string,
+  listaItems: ItemCarrito[]
+): Pedido {
+  const total = listaItems.reduce((sum, i) => sum + i.subtotal, 0);
+  const id = Math.max(0, ...pedidosMock.map(p => p.id)) + 1;
+  for (const item of listaItems) {
+    const p = productosMock.find(pr => pr.codigo === item.producto.codigo);
+    if (p) p.stockReservado += item.cantidad;
+  }
+  const pedido: Pedido = {
+    id,
+    cliente: { nombre: nombreCliente.trim(), contacto: contacto.trim(), dni: dni.trim() },
+    items: listaItems,
+    total,
+    descuento: 0,
+    fecha: new Date(),
+    estado: 'Pendiente',
+  };
+  pedidosMock.push(pedido);
+  return pedido;
 }
 
 export default function RealizarPedido() {
@@ -16,8 +41,10 @@ export default function RealizarPedido() {
   const [modo, setModo] = useState<'buscar' | 'catalogo'>('catalogo');
   const [busqueda, setBusqueda] = useState('');
   const [resultados, setResultados] = useState<Producto[]>([]);
-  const [items, setItems] = useState<DetalleVenta[]>([]);
-  const [direccion, setDireccion] = useState('');
+  const [items, setItems] = useState<ItemCarrito[]>([]);
+  const [nombreCliente, setNombreCliente] = useState(user?.nombreReal ?? '');
+  const [contacto, setContacto] = useState('');
+  const [dni, setDni] = useState('');
   const [mostrarConfirmacion, setMostrarConfirmacion] = useState(false);
   const [error, setError] = useState('');
   const [verHistorial, setVerHistorial] = useState(false);
@@ -50,12 +77,13 @@ export default function RealizarPedido() {
 
   const agregarItem = (p: Producto) => {
     setError('');
+    const disponible = stockDisponible(p);
     const existente = items.find(i => i.producto.codigo === p.codigo);
     if (existente) {
-      if (existente.cantidad + 1 > p.stockActual) { mostrarError(`Stock insuficiente. Disponible: ${p.stockActual}`); return; }
+      if (existente.cantidad + 1 > disponible) { mostrarError(`Stock disponible insuficiente. Disponible: ${disponible}`); return; }
       setItems(items.map(i => i.producto.codigo === p.codigo ? { ...i, cantidad: i.cantidad + 1, subtotal: (i.cantidad + 1) * i.precioCongelado } : i));
     } else {
-      if (1 > p.stockActual) { mostrarError(`Stock insuficiente para "${displayName(p)}".`); return; }
+      if (1 > disponible) { mostrarError(`Stock disponible insuficiente para "${displayName(p)}".`); return; }
       setItems([...items, { producto: p, cantidad: 1, precioCongelado: p.precioVenta, subtotal: p.precioVenta }]);
     }
     setBusqueda(''); setResultados([]);
@@ -65,7 +93,7 @@ export default function RealizarPedido() {
     setError('');
     if (nuevaCant < 1) { setItems(items.filter(i => i.producto.codigo !== codigo)); return; }
     const p = items.find(i => i.producto.codigo === codigo);
-    if (p && nuevaCant > p.producto.stockActual) { mostrarError(`Stock insuficiente. Máximo: ${p.producto.stockActual}`); return; }
+    if (p && nuevaCant > stockDisponible(p.producto)) { mostrarError(`Stock disponible insuficiente. Máximo: ${stockDisponible(p.producto)}`); return; }
     setItems(items.map(i => i.producto.codigo === codigo ? { ...i, cantidad: nuevaCant, subtotal: nuevaCant * i.precioCongelado } : i));
   };
 
@@ -74,16 +102,18 @@ export default function RealizarPedido() {
   const confirmarPedido = () => {
     setError('');
     if (items.length === 0) { mostrarError('Agregue al menos un producto.'); return; }
-    if (!direccion.trim()) { mostrarError('Ingrese una dirección de entrega.'); return; }
+    if (!nombreCliente.trim()) { mostrarError('Ingrese el nombre del cliente.'); return; }
+    if (!contacto.trim()) { mostrarError('Ingrese un medio de contacto (teléfono o email).'); return; }
+    if (!dni.trim()) { mostrarError('Ingrese el DNI del cliente.'); return; }
     for (const item of items) {
       const p = productosMock.find(pr => pr.codigo === item.producto.codigo);
-      if (!p || p.stockActual < item.cantidad) { mostrarError(`Stock insuficiente para "${displayName(item.producto)}".`); return; }
+      if (!p || stockDisponible(p) < item.cantidad) { mostrarError(`Stock disponible insuficiente para "${displayName(item.producto)}".`); return; }
     }
-    for (const item of items) { const p = productosMock.find(pr => pr.codigo === item.producto.codigo); if (p) p.stockActual -= item.cantidad; }
+    realizarPedido(nombreCliente, contacto, dni, items);
     setMostrarConfirmacion(true);
   };
 
-  const nuevoPedido = () => { setItems([]); setDireccion(''); setMostrarConfirmacion(false); setError(''); setBusqueda(''); setResultados([]); };
+  const nuevoPedido = () => { setItems([]); setNombreCliente(user?.nombreReal ?? ''); setContacto(''); setDni(''); setMostrarConfirmacion(false); setError(''); setBusqueda(''); setResultados([]); };
 
   const cantidadEnCarrito = (codigo: string) => items.find(i => i.producto.codigo === codigo)?.cantidad ?? 0;
 
@@ -94,8 +124,7 @@ export default function RealizarPedido() {
       generarPDF({
         titulo: 'COMPROBANTE DE PEDIDO',
         numero: nroPedido,
-        cliente: user?.nombreReal ?? '—',
-        direccion,
+        cliente: `${nombreCliente} — DNI ${dni} — ${contacto}`,
         items: items.map(i => ({
           producto: displayName(i.producto),
           cantidad: i.cantidad,
@@ -125,10 +154,11 @@ export default function RealizarPedido() {
                 <span><strong>Fecha:</strong> {new Date().toLocaleDateString('es-AR')}</span>
               </div>
               <div className="flex justify-between">
-                <span><strong>Cliente:</strong> {user?.nombreReal}</span>
+                <span><strong>Cliente:</strong> {nombreCliente}</span>
                 <span><strong>Hora:</strong> {new Date().toLocaleTimeString('es-AR')}</span>
               </div>
-              <p><strong>Dirección de entrega:</strong> {direccion}</p>
+              <p><strong>Contacto:</strong> {contacto}</p>
+              <p><strong>DNI:</strong> {dni}</p>
               <p><strong>Estado:</strong> Pendiente</p>
             </div>
             <table className="w-full text-base mb-4">
@@ -155,7 +185,7 @@ export default function RealizarPedido() {
               <span className="text-base text-slate-600">Total {items.length} {items.length === 1 ? 'producto' : 'productos'}</span>
               <span className="text-3xl font-bold text-slate-800">${total.toFixed(2)}</span>
             </div>
-            <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-base mb-4 flex items-center gap-2 justify-center no-print"><CheckCircle size={18} /> Pedido registrado.</div>
+            <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-base mb-4 flex items-center gap-2 justify-center no-print"><CheckCircle size={18} /> Pedido registrado. Stock reservado temporalmente hasta la confirmación.</div>
             <div className="flex flex-col sm:flex-row gap-3 no-print">
               <button onClick={handleDownloadPDF} className="flex items-center justify-center gap-1.5 flex-1 px-4 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors text-base">
                 <Download size={18} /> Descargar PDF
@@ -168,7 +198,7 @@ export default function RealizarPedido() {
               </button>
             </div>
             <div className="text-center text-sm text-slate-400 mt-4 pt-3 border-t border-slate-200 no-print">
-              <p>Contrato: realizarPedido(listaItems, idCliente, direccionEntrega) — UC-08</p>
+              <p>Contrato: realizarPedido(nombreCliente, contacto, dni, listaItems) — UC-08</p>
             </div>
           </div>
         </div>
@@ -201,16 +231,16 @@ export default function RealizarPedido() {
             <table className="w-full text-base border border-slate-200 rounded-lg overflow-hidden">
               <thead className="bg-slate-50">
                 <tr className="text-left">
-                  <th className="px-3 py-2">N°</th><th className="px-3 py-2">Fecha</th><th className="px-3 py-2">Dirección</th><th className="px-3 py-2 text-right">Total</th><th className="px-3 py-2">Estado</th>
+                  <th className="px-3 py-2">N°</th><th className="px-3 py-2">Fecha</th><th className="px-3 py-2">Cliente</th><th className="px-3 py-2 text-right">Total</th><th className="px-3 py-2">Estado</th>
                 </tr>
               </thead>
               <tbody>{pedidosMock.map(p => (
                 <tr key={p.id} className="border-t border-slate-100 hover:bg-slate-50">
                   <td className="px-3 py-2 font-mono">{p.id}</td>
                   <td className="px-3 py-2 text-sm text-slate-500">{p.fecha.toLocaleDateString('es-AR')}</td>
-                  <td className="px-3 py-2 text-sm">{p.direccionEntrega}</td>
+                  <td className="px-3 py-2 text-sm">{p.cliente.nombre}</td>
                   <td className="px-3 py-2 text-right font-medium">${p.total.toFixed(2)}</td>
-                  <td className="px-3 py-2"><span className={`text-sm px-2.5 py-0.5 rounded-full ${p.estado === 'Entregado' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{p.estado}</span></td>
+                  <td className="px-3 py-2"><span className={`text-sm px-2.5 py-0.5 rounded-full ${p.estado === 'Confirmado' || p.estado === 'Entregado' ? 'bg-green-100 text-green-700' : p.estado === 'Cancelado' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{p.estado}</span></td>
                 </tr>
               ))}</tbody>
             </table>
@@ -244,7 +274,7 @@ export default function RealizarPedido() {
                     <div key={p.codigo} className="flex items-center justify-between px-4 py-3 hover:bg-blue-50 border-b border-slate-100 last:border-0 cursor-pointer transition-colors" onClick={() => agregarItem(p)}>
                       <div className="min-w-0">
                         <p className="font-medium text-slate-800 text-base truncate">{displayName(p)}</p>
-                        <p className="text-sm text-slate-500">Stock: {p.stockActual} | Cód: {p.codigo}</p>
+                        <p className="text-sm text-slate-500">Stock disponible: {stockDisponible(p)} | Cód: {p.codigo}</p>
                       </div>
                       <div className="text-right ml-3 shrink-0">
                         <p className="font-semibold text-blue-600 text-base">${p.precioVenta.toFixed(2)}</p>
@@ -285,12 +315,12 @@ export default function RealizarPedido() {
                     <div className="space-y-2">
                       {variantes.map(p => {
                         const enCarrito = cantidadEnCarrito(p.codigo);
-                        const sinStock = p.stockActual <= 0;
+                        const sinStock = stockDisponible(p) <= 0;
                         return (
                           <div key={p.codigo} className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 ${sinStock ? 'opacity-50' : 'bg-slate-50 hover:bg-blue-50 transition-colors'}`}>
                             <div className="flex-1 min-w-0">
                               <p className="text-base font-medium text-slate-700 truncate">{p.subcategoria}</p>
-                              <p className="text-sm text-slate-400">Stock: {p.stockActual} uds.</p>
+                              <p className="text-sm text-slate-400">Stock disponible: {stockDisponible(p)} uds.</p>
                             </div>
                             <div className="flex items-center gap-2 ml-2 shrink-0">
                               <span className="text-base font-bold text-blue-600 tabular-nums">${p.precioVenta.toFixed(2)}</span>
@@ -377,9 +407,19 @@ export default function RealizarPedido() {
                 <span className="text-3xl font-bold text-slate-800 tabular-nums">${total.toFixed(2)}</span>
               </div>
 
-              <div>
-                <label className="block text-base font-semibold text-slate-700 mb-2 flex items-center gap-1.5"><MapPin size={18} /> Dirección de entrega <span className="text-red-500">*</span></label>
-                <input type="text" value={direccion} onChange={e => setDireccion(e.target.value)} placeholder="Calle, número, ciudad..." className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base" />
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-base font-semibold text-slate-700 mb-2 flex items-center gap-1.5"><User size={18} /> Nombre del cliente <span className="text-red-500">*</span></label>
+                  <input type="text" value={nombreCliente} onChange={e => setNombreCliente(e.target.value)} placeholder="Nombre y apellido" className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base" />
+                </div>
+                <div>
+                  <label className="block text-base font-semibold text-slate-700 mb-2 flex items-center gap-1.5"><Phone size={18} /> Contacto (teléfono o email) <span className="text-red-500">*</span></label>
+                  <input type="text" value={contacto} onChange={e => setContacto(e.target.value)} placeholder="Ej: 0376-154567890 o luciam@mail.com" className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base" />
+                </div>
+                <div>
+                  <label className="block text-base font-semibold text-slate-700 mb-2 flex items-center gap-1.5"><IdCard size={18} /> DNI <span className="text-red-500">*</span></label>
+                  <input type="text" value={dni} onChange={e => setDni(e.target.value)} placeholder="DNI del cliente" className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base" />
+                </div>
               </div>
 
               <button onClick={confirmarPedido} className="w-full px-4 py-3.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors text-lg flex items-center justify-center gap-2">

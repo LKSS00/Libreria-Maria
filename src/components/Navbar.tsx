@@ -7,6 +7,7 @@ import {
   Receipt,
   ClipboardList,
   ShoppingCart,
+  PackageCheck,
   LogOut,
   User,
 } from 'lucide-react';
@@ -15,6 +16,7 @@ const menuItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'empleado', 'repositor', 'cliente'] },
   { path: '/products/register', label: 'Registrar Producto', icon: Package, roles: ['admin'] },
   { path: '/sales/register', label: 'Registrar Venta', icon: Receipt, roles: ['admin', 'empleado'] },
+  { path: '/orders/process', label: 'Procesar Pedido', icon: PackageCheck, roles: ['admin', 'empleado'] },
   { path: '/stock/adjust', label: 'Ajustar Stock', icon: ClipboardList, roles: ['admin', 'repositor'] },
   { path: '/orders/create', label: 'Realizar Pedido', icon: ShoppingCart, roles: ['cliente'] },
 ];

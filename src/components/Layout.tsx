@@ -8,6 +8,7 @@ const pageTitles: Record<string, string> = {
   '/sales/register': 'Registrar Venta',
   '/stock/adjust': 'Ajustar Stock',
   '/orders/create': 'Realizar Pedido',
+  '/orders/process': 'Procesar Pedido Web',
 };
 
 export default function Layout() {

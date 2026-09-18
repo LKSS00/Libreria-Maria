@@ -8,18 +8,20 @@ import { FormField, TextInput, SelectInput } from '../components/FormField';
 export function registrarProducto(
   codigo: string,
   nombre: string,
-  subcategoria: string,
   categoria: string,
+  subcategoria: string,
+  proveedor: Proveedor,
   precioCosto: number,
-  precioVenta: number,
+  margenGanancia: number,
   stockActual: number,
-  stockMinimo: number,
-  idProveedor: number
+  stockMinimo: number
 ): Producto {
+  const precioVenta = precioCosto + (precioCosto * margenGanancia / 100);
   const producto: Producto = {
     codigo, nombre, subcategoria, categoria,
-    precioCosto, precioVenta, stockActual, stockMinimo,
-    idProveedor,
+    precioCosto, precioVenta,
+    stockActual, stockReservado: 0, stockMinimo,
+    idProveedor: proveedor.id,
   };
   productosMock.push(producto);
   return producto;
@@ -35,7 +37,7 @@ export default function RegistrarProducto() {
   const [subcategoria, setSubcategoria] = useState('');
   const [categoria, setCategoria] = useState('Escolar');
   const [precioCosto, setPrecioCosto] = useState('');
-  const [precioVenta, setPrecioVenta] = useState('');
+  const [margenGanancia, setMargenGanancia] = useState('');
   const [stockActual, setStockActual] = useState('');
   const [stockMinimo, setStockMinimo] = useState('');
 
@@ -68,7 +70,7 @@ export default function RegistrarProducto() {
     if (!nombre.trim()) nuevos.nombre = 'El nombre es obligatorio.';
     if (!subcategoria.trim()) nuevos.subcategoria = 'La subcategoría es obligatoria.';
     if (!precioCosto) nuevos.precioCosto = 'El precio de costo es obligatorio.';
-    if (!precioVenta) nuevos.precioVenta = 'El precio de venta es obligatorio.';
+    if (!margenGanancia) nuevos.margenGanancia = 'El margen de ganancia es obligatorio.';
     if (!stockActual) nuevos.stockActual = 'El stock actual es obligatorio.';
     if (!stockMinimo) nuevos.stockMinimo = 'El stock mínimo es obligatorio.';
     setErrores(nuevos);
@@ -88,7 +90,7 @@ export default function RegistrarProducto() {
       return;
     }
 
-    const pc = parseFloat(precioCosto), pv = parseFloat(precioVenta);
+    const pc = parseFloat(precioCosto), mg = parseFloat(margenGanancia);
     const sa = parseInt(stockActual), sm = parseInt(stockMinimo);
 
     if (productosMock.find(p => p.codigo === codigo)) {
@@ -96,11 +98,11 @@ export default function RegistrarProducto() {
       error('El código de producto ya existe.');
       return;
     }
-    if (pc <= 0 || pv <= 0) {
+    if (pc <= 0 || mg < 0) {
       setErrores(prev => ({
         ...prev,
         ...(pc <= 0 ? { precioCosto: 'Debe ser mayor a 0.' } : {}),
-        ...(pv <= 0 ? { precioVenta: 'Debe ser mayor a 0.' } : {}),
+        ...(mg < 0 ? { margenGanancia: 'No puede ser negativo.' } : {}),
       }));
       error('Verifique los valores numéricos.');
       return;
@@ -115,19 +117,26 @@ export default function RegistrarProducto() {
       return;
     }
 
-    registrarProducto(codigo, nombre.trim(), subcategoria.trim(), categoria, pc, pv, sa, sm, proveedorValido.id);
+    registrarProducto(codigo, nombre.trim(), categoria, subcategoria.trim(), proveedorValido, pc, mg, sa, sm);
     success('Producto registrado con éxito');
 
     setCodigo(''); setNombre(''); setSubcategoria(''); setCategoria('Escolar');
-    setPrecioCosto(''); setPrecioVenta(''); setStockActual(''); setStockMinimo('');
+    setPrecioCosto(''); setMargenGanancia(''); setStockActual(''); setStockMinimo('');
     setErrores({});
   };
 
   const cancelar = () => {
     setCodigo(''); setNombre(''); setSubcategoria(''); setCategoria('Escolar');
-    setPrecioCosto(''); setPrecioVenta(''); setStockActual(''); setStockMinimo('');
+    setPrecioCosto(''); setMargenGanancia(''); setStockActual(''); setStockMinimo('');
     setProveedorId(''); setProveedorValido(null); setProveedorError(''); setErrores({});
   };
+
+  const precioCalculado = (() => {
+    const pc = parseFloat(precioCosto);
+    const mg = parseFloat(margenGanancia);
+    if (!precioCosto || !margenGanancia || isNaN(pc) || isNaN(mg) || pc <= 0) return null;
+    return pc + (pc * mg / 100);
+  })();
 
   const proveedorNombre = (id: number) => proveedoresMock.find(p => p.id === id)?.nombreEmpresa ?? '—';
 
@@ -141,7 +150,7 @@ export default function RegistrarProducto() {
             <h2 className="text-xl font-semibold text-slate-800">Registrar Nuevo Producto</h2>
           </div>
           <div className="text-sm text-slate-400 text-right">
-            Contrato: registrarProducto(codigo, nombre, subcategoria,<br />categoria, precioCosto, precioVenta, stockActual, stockMinimo, idProveedor) — UC-03
+            Contrato: registrarProducto(código, nombre, categoría,<br />subcategoría, unProveedor, precioCosto, margenGanancia, stockActual, stockMinimo) — UC-03
           </div>
         </header>
 
@@ -189,8 +198,8 @@ export default function RegistrarProducto() {
             <FormField label="Precio Costo" required error={errores.precioCosto} htmlFor="precioCosto">
               <TextInput id="precioCosto" type="number" value={precioCosto} onChange={e => setPrecioCosto(e.target.value)} placeholder="0.00" min="0" step="0.01" disabled={!proveedorValido} error={errores.precioCosto} />
             </FormField>
-            <FormField label="Precio Venta" required error={errores.precioVenta} htmlFor="precioVenta">
-              <TextInput id="precioVenta" type="number" value={precioVenta} onChange={e => setPrecioVenta(e.target.value)} placeholder="0.00" min="0" step="0.01" disabled={!proveedorValido} error={errores.precioVenta} />
+            <FormField label="Margen de Ganancia (%)" required error={errores.margenGanancia} htmlFor="margenGanancia">
+              <TextInput id="margenGanancia" type="number" value={margenGanancia} onChange={e => setMargenGanancia(e.target.value)} placeholder="Ej: 40" min="0" step="0.01" disabled={!proveedorValido} error={errores.margenGanancia} />
             </FormField>
             <FormField label="Stock Actual" required error={errores.stockActual} htmlFor="stockActual">
               <TextInput id="stockActual" type="number" value={stockActual} onChange={e => setStockActual(e.target.value)} placeholder="0" min="0" disabled={!proveedorValido} error={errores.stockActual} />
@@ -199,6 +208,13 @@ export default function RegistrarProducto() {
               <TextInput id="stockMinimo" type="number" value={stockMinimo} onChange={e => setStockMinimo(e.target.value)} placeholder="0" min="0" disabled={!proveedorValido} error={errores.stockMinimo} />
             </FormField>
           </div>
+
+          {precioCalculado !== null && (
+            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-base flex items-center justify-between shrink-0">
+              <span className="text-slate-600">Precio de venta calculado <span className="text-slate-400 text-sm">(precioCosto + margenGanancia)</span></span>
+              <strong className="text-blue-700 tabular-nums text-lg">${precioCalculado.toFixed(2)}</strong>
+            </div>
+          )}
 
           <div className="flex gap-3 pt-5 mt-4 border-t border-slate-200 shrink-0">
             <button type="submit" disabled={!proveedorValido} className="flex items-center gap-1.5 px-7 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed text-base">

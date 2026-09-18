@@ -1,13 +1,38 @@
 import { useState } from 'react';
-import { productosMock, buscarProductos, ventasMock } from '../data/mockData';
+import { productosMock, buscarProductos, buscarCliente, ventasMock, mediosPagoMock } from '../data/mockData';
 import { useAuth } from '../context/AuthContext';
-import type { Producto, DetalleVenta } from '../types';
-import { Search, Plus, Minus, Trash2, Receipt, History, CreditCard, CheckCircle, Printer, Download, PackageSearch } from 'lucide-react';
+import type { Producto, DetalleVenta, Cliente, MedioPago, Venta, Usuario } from '../types';
+import { Search, Plus, Minus, Trash2, Receipt, History, CreditCard, CheckCircle, Printer, Download, PackageSearch, UserCheck, UserX } from 'lucide-react';
 import { generarPDF, imprimirComprobante } from '../utils/pdfComprobante';
 import { useToast } from '../components/Toast';
 
 function displayName(p: Producto) {
   return `${p.nombre} — ${p.subcategoria}`;
+}
+
+export function registrarVenta(
+  listaItems: DetalleVenta[],
+  unEmpleado: Usuario,
+  unCliente: Cliente,
+  unMedioPago: MedioPago
+): Venta {
+  for (const item of listaItems) {
+    const p = productosMock.find(pr => pr.codigo === item.producto.codigo);
+    if (p) p.stockActual -= item.cantidad;
+  }
+  const total = listaItems.reduce((sum, i) => sum + i.subtotal, 0);
+  const venta: Venta = {
+    numero: Math.floor(Math.random() * 9000) + 1000,
+    fechaHora: new Date(),
+    items: listaItems,
+    total,
+    empleado: unEmpleado,
+    cliente: unCliente,
+    medioPago: unMedioPago,
+    estado: 'Cobrada',
+  };
+  ventasMock.push(venta);
+  return venta;
 }
 
 export default function RegistrarVenta() {
@@ -16,8 +41,10 @@ export default function RegistrarVenta() {
   const [busqueda, setBusqueda] = useState('');
   const [resultados, setResultados] = useState<Producto[]>([]);
   const [items, setItems] = useState<DetalleVenta[]>([]);
-  const [medioPago, setMedioPago] = useState('efectivo');
+  const [medioPago, setMedioPago] = useState<MedioPago>(mediosPagoMock[0]);
   const [clienteDni, setClienteDni] = useState('');
+  const [clienteValido, setClienteValido] = useState<Cliente | null>(null);
+  const [clienteError, setClienteError] = useState('');
   const [mostrarComprobante, setMostrarComprobante] = useState(false);
   const [error, setError] = useState('');
 
@@ -54,18 +81,33 @@ export default function RegistrarVenta() {
 
   const total = items.reduce((sum, i) => sum + i.subtotal, 0);
 
+  const verificarCliente = () => {
+    setClienteError('');
+    setClienteValido(null);
+    const dni = clienteDni.trim();
+    if (!dni) { setClienteError('Ingrese un DNI para verificar.'); return; }
+    const c = buscarCliente(dni);
+    if (c) setClienteValido(c);
+    else {
+      setClienteError('No se encontró un cliente con ese DNI.');
+      toastError('No se encontró un cliente con ese DNI.');
+    }
+  };
+
   const confirmarVenta = () => {
     setError('');
     if (items.length === 0) { mostrarError('Agregue al menos un producto.'); return; }
+    if (!clienteValido) { mostrarError('Verifique un cliente válido (DNI) antes de confirmar la venta.'); return; }
     for (const item of items) {
       const p = productosMock.find(pr => pr.codigo === item.producto.codigo);
       if (!p || p.stockActual < item.cantidad) { mostrarError(`Stock insuficiente para "${displayName(item.producto)}".`); return; }
     }
-    for (const item of items) { const p = productosMock.find(pr => pr.codigo === item.producto.codigo); if (p) p.stockActual -= item.cantidad; }
+    if (!user) { mostrarError('Empleado no identificado.'); return; }
+    registrarVenta(items, user, clienteValido, medioPago);
     setMostrarComprobante(true);
   };
 
-  const nuevaVenta = () => { setItems([]); setMedioPago('efectivo'); setClienteDni(''); setMostrarComprobante(false); setError(''); setBusqueda(''); setResultados([]); };
+  const nuevaVenta = () => { setItems([]); setMedioPago(mediosPagoMock[0]); setClienteDni(''); setClienteValido(null); setClienteError(''); setMostrarComprobante(false); setError(''); setBusqueda(''); setResultados([]); };
 
   if (mostrarComprobante) {
     const nroVenta = Math.floor(Math.random() * 9000) + 1000;
@@ -107,8 +149,8 @@ export default function RegistrarVenta() {
                 <span><strong>Vendedor:</strong> {user?.nombreReal}</span>
                 <span><strong>Hora:</strong> {new Date().toLocaleTimeString('es-AR')}</span>
               </div>
-              <p><strong>Medio de pago:</strong> {medioPago}</p>
-              {clienteDni && <p><strong>Cliente DNI:</strong> {clienteDni}</p>}
+              <p><strong>Medio de pago:</strong> {medioPago.nombre}</p>
+              <p><strong>Cliente:</strong> {clienteValido?.nombre} — DNI {clienteValido?.dni}</p>
             </div>
             <table className="w-full text-base mb-4">
               <thead>
@@ -147,7 +189,7 @@ export default function RegistrarVenta() {
               </button>
             </div>
             <div className="text-center text-sm text-slate-400 mt-4 pt-3 border-t border-slate-200 no-print">
-              <p>Contrato: registrarVenta(listaItems, idEmpleado, idCliente, medioPago) — UC-05</p>
+              <p>Contrato: registrarVenta(listaItems, unEmpleado, unCliente, unMedioPago) — UC-05</p>
             </div>
           </div>
         </div>
@@ -262,18 +304,39 @@ export default function RegistrarVenta() {
               <div className="flex items-center gap-4">
                 <span className="text-base font-medium text-slate-700 flex items-center gap-1.5 shrink-0"><CreditCard size={16} /> Pago</span>
                 <div className="flex gap-4">
-                  {['efectivo', 'transferencia', 'tarjeta'].map(m => (
-                    <label key={m} className="flex items-center gap-2 cursor-pointer">
-                      <input type="radio" name="medioPago" value={m} checked={medioPago === m} onChange={e => setMedioPago(e.target.value)} className="accent-blue-600 w-4 h-4" />
-                      <span className="text-base capitalize">{m}</span>
+                  {mediosPagoMock.map(m => (
+                    <label key={m.id} className="flex items-center gap-2 cursor-pointer">
+                      <input type="radio" name="medioPago" checked={medioPago.id === m.id} onChange={() => setMedioPago(m)} className="accent-blue-600 w-4 h-4" />
+                      <span className="text-base capitalize">{m.nombre}</span>
                     </label>
                   ))}
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
-                <span className="text-base font-medium text-slate-700 shrink-0">DNI Cliente</span>
-                <input type="text" value={clienteDni} onChange={e => setClienteDni(e.target.value)} placeholder="DNI del cliente (opcional)" className="flex-1 max-w-xs px-3.5 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base" />
+              <div className="p-3 border border-slate-200 rounded-lg">
+                <p className="text-base font-medium text-slate-700 mb-2">Verificar cliente (DNI)</p>
+                <div className="flex gap-2">
+                  <input
+                    type="text" value={clienteDni} onChange={e => setClienteDni(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && verificarCliente()}
+                    placeholder="Ingrese el DNI del cliente" className="flex-1 px-3.5 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base"
+                  />
+                  <button type="button" onClick={verificarCliente} className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-base shrink-0">
+                    <UserCheck size={18} /> Verificar
+                  </button>
+                </div>
+                {clienteValido && (
+                  <div className="mt-2 flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 px-3 py-2 rounded-lg text-base">
+                    <CheckCircle size={18} />
+                    <span className="font-medium">{clienteValido.nombre}</span>
+                    <span className="text-sm text-green-600">DNI {clienteValido.dni} — {clienteValido.telefono}</span>
+                  </div>
+                )}
+                {clienteError && (
+                  <div className="mt-2 flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-base">
+                    <UserX size={18} /> {clienteError}
+                  </div>
+                )}
               </div>
 
               <button onClick={confirmarVenta} className="w-full px-4 py-3.5 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors text-lg flex items-center justify-center gap-2">
@@ -296,6 +359,8 @@ export default function RegistrarVenta() {
               <tr className="border-b-2 border-slate-200 text-left">
                 <th className="py-2 pr-2">N°</th>
                 <th className="py-2 pr-2">Fecha</th>
+                <th className="py-2 pr-2">Cliente</th>
+                <th className="py-2 pr-2">Pago</th>
                 <th className="py-2 pr-2 text-right">Total</th>
               </tr>
             </thead>
@@ -304,6 +369,8 @@ export default function RegistrarVenta() {
                 <tr key={v.numero} className="border-b border-slate-100">
                   <td className="py-2.5 pr-2 font-mono">{v.numero}</td>
                   <td className="py-2.5 pr-2 text-sm text-slate-500">{v.fechaHora.toLocaleDateString('es-AR')}</td>
+                  <td className="py-2.5 pr-2 text-sm text-slate-600">{v.cliente.nombre}</td>
+                  <td className="py-2.5 pr-2 text-sm capitalize text-slate-600">{v.medioPago.nombre}</td>
                   <td className="py-2.5 pr-2 text-right font-medium tabular-nums">${v.total.toFixed(2)}</td>
                 </tr>
               ))}

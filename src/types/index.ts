@@ -15,6 +15,18 @@ export interface Proveedor {
   direccion: string;
 }
 
+export interface Cliente {
+  dni: string;
+  nombre: string;
+  telefono: string;
+  email: string;
+}
+
+export interface MedioPago {
+  id: number;
+  nombre: 'efectivo' | 'tarjeta' | 'transferencia';
+}
+
 export interface Producto {
   codigo: string;
   nombre: string;
@@ -23,6 +35,7 @@ export interface Producto {
   precioCosto: number;
   precioVenta: number;
   stockActual: number;
+  stockReservado: number;
   stockMinimo: number;
   idProveedor: number;
 }
@@ -39,9 +52,9 @@ export interface Venta {
   fechaHora: Date;
   items: DetalleVenta[];
   total: number;
-  idEmpleado: number;
-  idCliente?: string;
-  medioPago: string;
+  empleado: Usuario;
+  cliente: Cliente;
+  medioPago: MedioPago;
   estado: 'Cobrada' | 'Cancelada';
 }
 
@@ -49,17 +62,18 @@ export interface ItemCarrito {
   producto: Producto;
   cantidad: number;
   precioCongelado: number;
+  subtotal: number;
 }
 
 export interface Pedido {
   id: number;
-  cliente: { nombre: string; contacto: string; dni?: string };
+  cliente: { nombre: string; contacto: string; dni: string };
   items: ItemCarrito[];
   total: number;
   descuento: number;
   fecha: Date;
   estado: 'Pendiente' | 'Confirmado' | 'Cancelado' | 'Entregado';
-  direccionEntrega?: string;
+  motivoCancelacion?: string;
 }
 
 export interface MovimientoStock {

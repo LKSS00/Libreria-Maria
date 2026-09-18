@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { productosMock, buscarProductos, movimientosStockMock } from '../data/mockData';
 import { useAuth } from '../context/AuthContext';
 import type { Producto, MovimientoStock } from '../types';
-import { Search, ClipboardList, Plus, Minus, CheckCircle, History, Printer, Download, AlertTriangle } from 'lucide-react';
+import { Search, ClipboardList, CheckCircle, History, Printer, Download, AlertTriangle } from 'lucide-react';
 import { generarPDF, imprimirComprobante } from '../utils/pdfComprobante';
 import { useToast } from '../components/Toast';
 import { FormField, TextInput } from '../components/FormField';
@@ -13,19 +13,17 @@ export default function AjustarStock() {
   const [busqueda, setBusqueda] = useState('');
   const [resultados, setResultados] = useState<Producto[]>([]);
   const [seleccionado, setSeleccionado] = useState<Producto | null>(null);
-  const [tipo, setTipo] = useState<'ingreso' | 'egreso'>('ingreso');
-  const [cantidad, setCantidad] = useState('');
+  const [nuevaCantidad, setNuevaCantidad] = useState('');
   const [motivo, setMotivo] = useState('');
   const [errores, setErrores] = useState<Record<string, string>>({});
   const [stockError, setStockError] = useState('');
   const [ultimoAjuste, setUltimoAjuste] = useState<{
     id: number;
     producto: Producto;
-    tipo: 'ingreso' | 'egreso';
-    cantidad: number;
-    motivo: string;
     cantidadAnterior: number;
     cantidadNueva: number;
+    diferencia: number;
+    motivo: string;
   } | null>(null);
 
   const handleBuscar = () => {
@@ -38,12 +36,13 @@ export default function AjustarStock() {
     setResultados([]);
     setBusqueda('');
     setStockError('');
+    setUltimoAjuste(null);
   };
 
   const validarCampos = (): boolean => {
     const nuevos: Record<string, string> = {};
     if (!seleccionado) nuevos.producto = 'Seleccione un producto.';
-    if (!cantidad || parseInt(cantidad) < 1) nuevos.cantidad = 'Ingrese una cantidad válida.';
+    if (!nuevaCantidad || isNaN(parseInt(nuevaCantidad)) || parseInt(nuevaCantidad) < 0) nuevos.nuevaCantidad = 'Ingrese una cantidad física válida (0 o más).';
     if (!motivo.trim()) nuevos.motivo = 'Indique el motivo del ajuste.';
     setErrores(nuevos);
     return Object.keys(nuevos).length === 0;
@@ -59,54 +58,61 @@ export default function AjustarStock() {
     }
 
     if (!seleccionado) return;
-    const cant = parseInt(cantidad);
+    const cant = parseInt(nuevaCantidad);
 
-    if (tipo === 'egreso' && cant > seleccionado.stockActual) {
-      setStockError(`Stock insuficiente para realizar el ajuste. Disponible: ${seleccionado.stockActual}`);
-      toastError(`Stock insuficiente para realizar el ajuste. Disponible: ${seleccionado.stockActual}`);
+    const p = productosMock.find(pr => pr.codigo === seleccionado.codigo);
+    if (!p) {
+      setStockError('El producto no ha sido encontrado en el sistema.');
+      toastError('El producto no ha sido encontrado en el sistema.');
       return;
     }
 
-    const p = productosMock.find(pr => pr.codigo === seleccionado.codigo);
-    if (!p) return;
     const cantidadAnterior = p.stockActual;
-    const diferencia = tipo === 'ingreso' ? cant : -cant;
-    p.stockActual += diferencia;
+    const diferencia = cant - cantidadAnterior;
+    p.stockActual = cant;
 
     const nuevoMovimiento: MovimientoStock = {
       id: movimientosStockMock.length + 1,
       idProducto: p.codigo,
       cantidadAnterior,
-      cantidadNueva: p.stockActual,
+      cantidadNueva: cant,
       motivo: motivo.trim(),
       idUsuario: user?.id ?? 0,
       fecha: new Date(),
     };
     movimientosStockMock.push(nuevoMovimiento);
 
-    setUltimoAjuste({ id: nuevoMovimiento.id, producto: p, tipo, cantidad: cant, motivo: motivo.trim(), cantidadAnterior, cantidadNueva: p.stockActual });
-    setCantidad('');
+    setUltimoAjuste({ id: nuevoMovimiento.id, producto: p, cantidadAnterior, cantidadNueva: cant, diferencia, motivo: motivo.trim() });
+    setNuevaCantidad('');
     setMotivo('');
     setErrores({});
     setSeleccionado(null);
-    toastSuccess('Ajuste registrado correctamente');
+    toastSuccess('Stock actualizado correctamente');
   };
 
   const nuevoAjuste = () => {
-    setSeleccionado(null); setCantidad(''); setMotivo(''); setTipo('ingreso'); setErrores({}); setStockError(''); setUltimoAjuste(null);
+    setSeleccionado(null); setNuevaCantidad(''); setMotivo(''); setErrores({}); setStockError(''); setUltimoAjuste(null);
   };
 
   const productoPorCodigo = (codigo: string) => productosMock.find(p => p.codigo === codigo);
 
+  const diferenciaActual = seleccionado
+    ? (() => {
+        const c = parseInt(nuevaCantidad);
+        if (!nuevaCantidad || isNaN(c)) return null;
+        return c - seleccionado.stockActual;
+      })()
+    : null;
+
   const handleDownloadPDF = () => {
     if (!ultimoAjuste) return;
     generarPDF({
-      titulo: 'COMPROBANTE DE AJUSTE DE STOCK',
+      titulo: 'COMPROBANTE DE AJUSTE DE INVENTARIO',
       numero: ultimoAjuste.id,
       cliente: user?.nombreReal ?? '—',
       items: [{
-        producto: `${ultimoAjuste.producto.nombre} — ${ultimoAjuste.producto.subcategoria} (${ultimoAjuste.tipo === 'ingreso' ? 'Ingreso' : 'Egreso'})`,
-        cantidad: ultimoAjuste.cantidad,
+        producto: `${ultimoAjuste.producto.nombre} — ${ultimoAjuste.producto.subcategoria} (${ultimoAjuste.diferencia >= 0 ? 'Ingreso / Ajuste positivo' : 'Ajuste negativo / Merma'})`,
+        cantidad: Math.abs(ultimoAjuste.diferencia),
         precioUnitario: 0,
         subtotal: 0,
       }],
@@ -128,7 +134,7 @@ export default function AjustarStock() {
             <h2 className="text-xl font-semibold text-slate-800">Ajustar Stock</h2>
           </div>
           <div className="text-base text-slate-400">
-            Contrato: ajustarStock(idProducto, cantidad, tipo, motivo, idResponsable) — UC-04
+            Contrato: registrarAjusteStock(unProducto, nuevaCantidad, motivo, unUsuario) — UC-04
           </div>
         </header>
 
@@ -138,7 +144,7 @@ export default function AjustarStock() {
               <div className="flex items-center gap-2 text-green-700">
                 <CheckCircle size={20} />
                 <p className="text-base font-medium">
-                  Ajuste registrado correctamente — <strong>{ultimoAjuste.producto.nombre} — {ultimoAjuste.producto.subcategoria}</strong>
+                  Stock actualizado correctamente — <strong>{ultimoAjuste.producto.nombre} — {ultimoAjuste.producto.subcategoria}</strong>
                 </p>
               </div>
               <div className="flex gap-2 shrink-0">
@@ -205,20 +211,16 @@ export default function AjustarStock() {
             </div>
 
             <div className="grid grid-cols-2 gap-4 mb-4 shrink-0">
-              <FormField label="Tipo de ajuste" required>
-                <div className="flex gap-6 mt-1.5">
-                  <label className="flex items-center gap-2.5 cursor-pointer">
-                    <input type="radio" name="tipo" value="ingreso" checked={tipo === 'ingreso'} onChange={() => setTipo('ingreso')} className="accent-blue-600 w-4 h-4" />
-                    <span className="text-base flex items-center gap-1.5"><Plus size={18} className="text-green-600" /> Ingreso</span>
-                  </label>
-                  <label className="flex items-center gap-2.5 cursor-pointer">
-                    <input type="radio" name="tipo" value="egreso" checked={tipo === 'egreso'} onChange={() => setTipo('egreso')} className="accent-blue-600 w-4 h-4" />
-                    <span className="text-base flex items-center gap-1.5"><Minus size={18} className="text-red-600" /> Egreso</span>
-                  </label>
-                </div>
+              <FormField label="Nueva Cantidad Verificada" required error={errores.nuevaCantidad} htmlFor="nuevaCantidad">
+                <TextInput id="nuevaCantidad" type="number" value={nuevaCantidad} onChange={e => setNuevaCantidad(e.target.value)} placeholder="Cantidad física" min="0" error={errores.nuevaCantidad} />
               </FormField>
-              <FormField label="Cantidad" required error={errores.cantidad} htmlFor="cantidad">
-                <TextInput id="cantidad" type="number" value={cantidad} onChange={e => setCantidad(e.target.value)} placeholder="0" min="1" error={errores.cantidad} />
+
+              <FormField label="Diferencia <span className='text-slate-400 font-normal text-sm'>(nueva − actual)</span>">
+                <div className={`px-3.5 py-2.5 rounded-lg border text-base tabular-nums font-semibold ${diferenciaActual === null ? 'bg-slate-50 border-slate-200 text-slate-400' : diferenciaActual > 0 ? 'bg-green-50 border-green-200 text-green-700' : diferenciaActual < 0 ? 'bg-red-50 border-red-200 text-red-700' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
+                  {diferenciaActual === null
+                    ? '—'
+                    : `${diferenciaActual > 0 ? '+' : ''}${diferenciaActual} (${diferenciaActual > 0 ? 'ingreso' : diferenciaActual < 0 ? 'merma' : 'sin cambios'})`}
+                </div>
               </FormField>
             </div>
 

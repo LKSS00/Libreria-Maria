@@ -8,6 +8,7 @@ import RegistrarProducto from './pages/RegistrarProducto';
 import RegistrarVenta from './pages/RegistrarVenta';
 import AjustarStock from './pages/AjustarStock';
 import RealizarPedido from './pages/RealizarPedido';
+import ProcesarPedido from './pages/ProcesarPedido';
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
               <Route path="/sales/register" element={<RegistrarVenta />} />
               <Route path="/stock/adjust" element={<AjustarStock />} />
               <Route path="/orders/create" element={<RealizarPedido />} />
+              <Route path="/orders/process" element={<ProcesarPedido />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
