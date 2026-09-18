@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { productosMock, pedidosMock, ventasMock, mediosPagoMock, buscarCliente } from '../data/mockData';
 import { useAuth } from '../context/AuthContext';
 import type { Pedido, ItemCarrito, Cliente, MedioPago, Venta, Usuario } from '../types';
-import { PackageCheck, ClipboardList, XCircle, CheckCircle, User, Phone, IdCard, Receipt, History } from 'lucide-react';
+import { PackageCheck, ClipboardList, XCircle, CheckCircle, User, Phone, IdCard, Receipt, History, Download, Printer } from 'lucide-react';
 import { useToast } from '../components/Toast';
+import { generarPDF, imprimirComprobante } from '../utils/pdfComprobante';
 
 export function procesarPedido(
   unPedido: Pedido,
@@ -122,6 +123,30 @@ export default function ProcesarPedido() {
     toastInfo('Pedido cancelado. Stock reservado liberado.');
     setMotivo('');
     refresh();
+  };
+
+  const handleDownloadPDF = () => {
+    if (!seleccionado || seleccionado.estado !== 'Confirmado') return;
+    // Buscamos el número de venta asociado (el más reciente de este cliente, o podríamos buscar en ventasMock)
+    // Para simplificar, asumimos que se generó una venta con los mismos items.
+    // Lo más correcto es encontrar la venta exacta, pero como maqueta, usamos el ID del pedido.
+    const ventaRelacionada = ventasMock.slice().reverse().find(v => v.cliente.dni === seleccionado.cliente.dni && v.total === seleccionado.total);
+    const nroComprobante = ventaRelacionada ? ventaRelacionada.numero : seleccionado.id;
+
+    generarPDF({
+      titulo: 'COMPROBANTE DE VENTA (PEDIDO WEB)',
+      numero: nroComprobante,
+      cliente: `${seleccionado.cliente.nombre} — DNI ${seleccionado.cliente.dni} — ${seleccionado.cliente.contacto}`,
+      items: seleccionado.items.map(i => ({
+        producto: `${i.producto.nombre} — ${i.producto.subcategoria}`,
+        cantidad: i.cantidad,
+        precioUnitario: i.precioCongelado,
+        subtotal: i.subtotal,
+      })),
+      total: seleccionado.total,
+      fecha: new Date(),
+      etiquetaCliente: 'Cliente',
+    });
   };
 
   const esItemValido = (i: ItemCarrito) => !!i.producto && i.cantidad > 0;
@@ -267,15 +292,77 @@ export default function ProcesarPedido() {
                   </div>
                 </>
               ) : (
-                <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg text-base text-slate-600 text-center">
-                  {seleccionado.estado === 'Confirmado'
-                    ? 'Pedido formalizado como venta efectiva. El stock reservado fue comprometido.'
-                    : seleccionado.estado === 'Cancelado'
-                      ? `Pedido cancelado. El stock reservado fue liberado.${seleccionado.motivoCancelacion ? ` Motivo: ${seleccionado.motivoCancelacion}` : ''}`
-                      : `Entregado al cliente.`}
+                <div className="space-y-4">
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg text-base text-slate-600 text-center">
+                    {seleccionado.estado === 'Confirmado'
+                      ? 'Pedido formalizado como venta efectiva. El stock reservado fue comprometido.'
+                      : seleccionado.estado === 'Cancelado'
+                        ? `Pedido cancelado. El stock reservado fue liberado.${seleccionado.motivoCancelacion ? ` Motivo: ${seleccionado.motivoCancelacion}` : ''}`
+                        : `Entregado al cliente.`}
+                  </div>
+                  {seleccionado.estado === 'Confirmado' && (
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <button onClick={handleDownloadPDF} className="flex items-center justify-center gap-1.5 flex-1 px-4 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors text-base">
+                        <Download size={18} /> Descargar PDF
+                      </button>
+                      <button onClick={imprimirComprobante} className="flex items-center justify-center gap-1.5 flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors text-base">
+                        <Printer size={18} /> Imprimir
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
+            
+            {/* Plantilla oculta para impresión */}
+            {seleccionado.estado === 'Confirmado' && (
+              <div className="hidden print:block">
+                <div id="comprobante-print">
+                  <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                    <div style={{ fontSize: '24px', fontWeight: 'bold', fontFamily: "'Times New Roman', serif" }}>Librería María</div>
+                    <p style={{ fontSize: '12px', marginTop: '4px' }}>Av. 9 de Julio 1200 — Apóstoles, Misiones</p>
+                    <p style={{ fontSize: '12px' }}>Tel: xxx | xxx@gmail.com</p>
+                    <hr style={{ margin: '12px 0', borderTop: '2px solid #000' }} />
+                    <h2 style={{ fontSize: '16px', fontWeight: 'bold', textTransform: 'uppercase' }}>Comprobante de Venta (Web)</h2>
+                  </div>
+                  <div style={{ fontSize: '12px', marginBottom: '16px', paddingBottom: '12px', borderBottom: '1px solid #ccc' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span><strong>N° Pedido/Venta:</strong> {seleccionado.id}</span>
+                      <span><strong>Fecha:</strong> {new Date().toLocaleDateString('es-AR')}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span><strong>Cliente:</strong> {seleccionado.cliente.nombre}</span>
+                      <span><strong>Hora:</strong> {new Date().toLocaleTimeString('es-AR')}</span>
+                    </div>
+                    <p><strong>DNI:</strong> {seleccionado.cliente.dni}</p>
+                  </div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '16px', fontSize: '12px' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '2px solid #000' }}>
+                        <th style={{ textAlign: 'left', padding: '8px 0' }}>Producto</th>
+                        <th style={{ textAlign: 'center', padding: '8px 0' }}>Cant.</th>
+                        <th style={{ textAlign: 'right', padding: '8px 0' }}>P. Unit.</th>
+                        <th style={{ textAlign: 'right', padding: '8px 0' }}>Subtotal</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {seleccionado.items.map(i => (
+                        <tr key={i.producto.codigo} style={{ borderBottom: '1px solid #ccc' }}>
+                          <td style={{ padding: '8px 0' }}>{i.producto.nombre}</td>
+                          <td style={{ textAlign: 'center', padding: '8px 0' }}>{i.cantidad}</td>
+                          <td style={{ textAlign: 'right', padding: '8px 0' }}>${i.precioCongelado.toFixed(2)}</td>
+                          <td style={{ textAlign: 'right', padding: '8px 0' }}>${i.subtotal.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '2px solid #000', paddingTop: '12px' }}>
+                    <span>Total {seleccionado.items.length} {seleccionado.items.length === 1 ? 'producto' : 'productos'}</span>
+                    <span style={{ fontSize: '20px', fontWeight: 'bold' }}>${seleccionado.total.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
       </section>

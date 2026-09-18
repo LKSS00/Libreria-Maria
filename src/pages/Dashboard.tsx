@@ -12,11 +12,13 @@ import {
   FileWarning,
   Bell,
   ArrowRight,
+  PackageCheck,
 } from 'lucide-react';
 
 const modules = [
   { title: 'Registrar Producto', description: 'Alta de nuevos productos con verificación de proveedor', path: '/products/register', icon: PackagePlus, roles: ['admin'] },
   { title: 'Registrar Venta', description: 'Punto de venta con carrito, cálculo de total y comprobante', path: '/sales/register', icon: Receipt, roles: ['admin', 'empleado'] },
+  { title: 'Procesar Pedido Web', description: 'Formalizar pedidos remotos como ventas efectivas', path: '/orders/process', icon: PackageCheck, roles: ['admin', 'empleado'] },
   { title: 'Ajustar Stock', description: 'Ajuste manual de inventario con registro de motivo', path: '/stock/adjust', icon: ClipboardList, roles: ['admin', 'repositor'] },
   { title: 'Realizar Pedido', description: 'Carrito de compras digital con confirmación', path: '/orders/create', icon: ShoppingCart, roles: ['cliente'] },
 ];
@@ -99,10 +101,16 @@ export default function Dashboard() {
 
         <section className="col-span-4 flex flex-col gap-5 min-h-0">
           {stockBajo.length > 0 && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-5 flex-1 min-h-0 flex flex-col">
-              <div className="flex items-center gap-2 mb-3 shrink-0">
-                <Bell size={18} className="text-red-600" />
-                <h4 className="font-semibold text-red-700 text-base">Productos con stock bajo</h4>
+            <div 
+              onClick={() => navigate('/stock/adjust')}
+              className="bg-red-50 border border-red-200 rounded-xl p-5 flex-1 min-h-0 flex flex-col cursor-pointer hover:shadow-md hover:bg-red-100/50 transition-all group"
+            >
+              <div className="flex items-center justify-between mb-3 shrink-0">
+                <div className="flex items-center gap-2">
+                  <Bell size={18} className="text-red-600" />
+                  <h4 className="font-semibold text-red-700 text-base">Productos con stock bajo</h4>
+                </div>
+                <ArrowRight size={16} className="text-red-600 opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
               <div className="space-y-2 overflow-y-auto">
                 {stockBajo.map(p => (
@@ -116,10 +124,16 @@ export default function Dashboard() {
           )}
 
           {pedidosPendientes.length > 0 && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-5 flex-1 min-h-0 flex flex-col">
-              <div className="flex items-center gap-2 mb-3 shrink-0">
-                <FileWarning size={18} className="text-yellow-600" />
-                <h4 className="font-semibold text-yellow-700 text-base">Pedidos pendientes</h4>
+            <div 
+              onClick={() => navigate('/orders/process')}
+              className="bg-yellow-50 border border-yellow-200 rounded-xl p-5 flex-1 min-h-0 flex flex-col cursor-pointer hover:shadow-md hover:bg-yellow-100/50 transition-all group"
+            >
+              <div className="flex items-center justify-between mb-3 shrink-0">
+                <div className="flex items-center gap-2">
+                  <FileWarning size={18} className="text-yellow-600" />
+                  <h4 className="font-semibold text-yellow-700 text-base">Pedidos pendientes</h4>
+                </div>
+                <ArrowRight size={16} className="text-yellow-600 opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
               <div className="space-y-2 overflow-y-auto">
                 {pedidosPendientes.map(p => (
