@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { productosMock, buscarProductos, movimientosStockMock } from '../data/mockData';
 import { useAuth } from '../context/AuthContext';
 import type { Producto, MovimientoStock } from '../types';
@@ -6,12 +6,16 @@ import { Search, ClipboardList, CheckCircle, History, Printer, Download, AlertTr
 import { generarPDF, imprimirComprobante } from '../utils/pdfComprobante';
 import { useToast } from '../components/Toast';
 import { FormField, TextInput } from '../components/FormField';
+import { siguienteCampo } from '../utils/campoForm';
 
 export default function AjustarStock() {
   const { user } = useAuth();
   const { success: toastSuccess, error: toastError } = useToast();
   const [busqueda, setBusqueda] = useState('');
-  const [resultados, setResultados] = useState<Producto[]>([]);
+  const resultados = useMemo(
+    () => (busqueda.trim() ? buscarProductos(busqueda) : []),
+    [busqueda]
+  );
   const [seleccionado, setSeleccionado] = useState<Producto | null>(null);
   const [nuevaCantidad, setNuevaCantidad] = useState('');
   const [motivo, setMotivo] = useState('');
@@ -26,14 +30,8 @@ export default function AjustarStock() {
     motivo: string;
   } | null>(null);
 
-  const handleBuscar = () => {
-    if (!busqueda.trim()) return;
-    setResultados(buscarProductos(busqueda));
-  };
-
   const seleccionarProducto = (p: Producto) => {
     setSeleccionado(p);
-    setResultados([]);
     setBusqueda('');
     setStockError('');
     setUltimoAjuste(null);
@@ -133,9 +131,6 @@ export default function AjustarStock() {
             <ClipboardList size={22} className="text-blue-600" />
             <h2 className="text-xl font-semibold text-slate-800">Ajustar Stock</h2>
           </div>
-          <div className="text-base text-slate-400">
-            Contrato: registrarAjusteStock(unProducto, nuevaCantidad, motivo, unUsuario) — UC-04
-          </div>
         </header>
 
         {ultimoAjuste && (
@@ -162,9 +157,14 @@ export default function AjustarStock() {
         {!seleccionado && (
           <div className="flex flex-col min-h-0 flex-1">
             <label className="block text-base font-semibold text-slate-700 mb-2">Buscar producto</label>
-            <div className="flex gap-2 mb-4 shrink-0">
-              <input type="text" value={busqueda} onChange={e => setBusqueda(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleBuscar()} placeholder="Buscar por nombre, subcategoría o código..." className="flex-1 px-3.5 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base" />
-              <button onClick={handleBuscar} className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-base shrink-0"><Search size={18} /> Buscar</button>
+            <div className="flex items-center gap-2 mb-4 shrink-0">
+              <Search size={18} className="text-slate-400 shrink-0" />
+              <input type="text" value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar por nombre, subcategoría o código..." className="flex-1 px-3.5 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base" />
+              {busqueda && (
+                <button onClick={() => setBusqueda('')} className="text-base text-slate-400 hover:text-slate-600 shrink-0">
+                  Limpiar
+                </button>
+              )}
             </div>
 
             <div className="flex-1 min-h-0 overflow-y-auto">
@@ -183,7 +183,9 @@ export default function AjustarStock() {
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-slate-400">
                   <ClipboardList size={44} className="mb-2 opacity-40" />
-                  <p className="text-base text-center">Busque un producto para<br />ajustar su stock.</p>
+                  <p className="text-base text-center">
+                    {busqueda.trim() ? 'Sin resultados para su búsqueda.' : <>Busque un producto para<br />ajustar su stock.</>}
+                  </p>
                 </div>
               )}
             </div>
@@ -191,7 +193,7 @@ export default function AjustarStock() {
         )}
 
         {seleccionado && (
-          <form onSubmit={handleSubmit} noValidate className="flex flex-col min-h-0 flex-1">
+          <form onSubmit={handleSubmit} onKeyDown={siguienteCampo} noValidate className="flex flex-col min-h-0 flex-1">
             {/* Alerta de stock mínimo: card informativa con color dinámico */}
             <div className={`mb-4 p-4 rounded-lg border shrink-0 ${seleccionado.stockActual <= seleccionado.stockMinimo ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200'}`}>
               <p className="text-base font-semibold text-slate-800 mb-1">Producto seleccionado: <strong>{seleccionado.nombre} — {seleccionado.subcategoria}</strong></p>
@@ -230,6 +232,12 @@ export default function AjustarStock() {
                   id="motivo"
                   value={motivo}
                   onChange={e => setMotivo(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      (e.currentTarget.form as HTMLFormElement)?.requestSubmit();
+                    }
+                  }}
                   placeholder="Ej: Rotura de stock, error de inventario, devolución..."
                   rows={2}
                   className={`w-full px-3.5 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base resize-none ${errores.motivo ? 'border-red-500 bg-red-50 focus:ring-red-400' : 'border-slate-300'}`}

@@ -4,6 +4,7 @@ import type { Proveedor, Producto } from '../types';
 import { Package, Search, Save, X, CheckCircle2, Eye } from 'lucide-react';
 import { useToast } from '../components/Toast';
 import { FormField, TextInput, SelectInput } from '../components/FormField';
+import { siguienteCampo } from '../utils/campoForm';
 
 export function registrarProducto(
   codigo: string,
@@ -149,9 +150,6 @@ export default function RegistrarProducto() {
             <Package size={22} className="text-blue-600" />
             <h2 className="text-xl font-semibold text-slate-800">Registrar Nuevo Producto</h2>
           </div>
-          <div className="text-sm text-slate-400 text-right">
-            Contrato: registrarProducto(código, nombre, categoría,<br />subcategoría, unProveedor, precioCosto, margenGanancia, stockActual, stockMinimo) — UC-03
-          </div>
         </header>
 
         <div className="mb-5 p-4 bg-slate-50 rounded-lg border border-slate-200 shrink-0">
@@ -162,6 +160,7 @@ export default function RegistrarProducto() {
                 type="number"
                 value={proveedorId}
                 onChange={e => { setProveedorId(e.target.value); setProveedorError(''); }}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); verificarProveedor(); } }}
                 placeholder="ID del proveedor"
                 className="flex-1"
                 error={proveedorError || undefined}
@@ -179,7 +178,7 @@ export default function RegistrarProducto() {
           <div className="mt-2.5 text-sm text-slate-400">IDs: 1=Distribuidora Norte, 2=Faber-Castell, 3=Papelera del Valle, 4=Maxim Oficinas</div>
         </div>
 
-        <form onSubmit={handleSubmit} noValidate className="flex flex-col min-h-0 flex-1">
+        <form onSubmit={handleSubmit} onKeyDown={siguienteCampo} noValidate className="flex flex-col min-h-0 flex-1">
           <div className="grid grid-cols-2 gap-x-4 gap-y-4 min-h-0 overflow-y-auto">
             <FormField label="Código" required error={errores.codigo} htmlFor="codigo">
               <TextInput id="codigo" value={codigo} onChange={e => setCodigo(e.target.value)} placeholder="Código de barras" disabled={!proveedorValido} error={errores.codigo} />

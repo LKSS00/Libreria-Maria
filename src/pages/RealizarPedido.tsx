@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react';
-import { productosMock, buscarProductos, pedidosMock, stockDisponible } from '../data/mockData';
+import { productosMock, pedidosMock, stockDisponible } from '../data/mockData';
 import { useAuth } from '../context/AuthContext';
 import type { Producto, ItemCarrito, Pedido } from '../types';
-import { Search, ShoppingCart, Plus, Minus, Trash2, CheckCircle, History, BookOpen, Package, Printer, Download, User, Phone, IdCard } from 'lucide-react';
+import { Search, ShoppingCart, Plus, Minus, Trash2, CheckCircle, History, Package, Printer, Download, User, Phone, IdCard } from 'lucide-react';
 import { generarPDF, imprimirComprobante } from '../utils/pdfComprobante';
 import { useToast } from '../components/Toast';
+import { siguienteCampo } from '../utils/campoForm';
 
 function displayName(p: Producto) {
   return `${p.nombre} — ${p.subcategoria}`;
@@ -38,9 +39,7 @@ export function realizarPedido(
 export default function RealizarPedido() {
   const { user } = useAuth();
   const { error: toastError } = useToast();
-  const [modo, setModo] = useState<'buscar' | 'catalogo'>('catalogo');
   const [busqueda, setBusqueda] = useState('');
-  const [resultados, setResultados] = useState<Producto[]>([]);
   const [items, setItems] = useState<ItemCarrito[]>([]);
   const [nombreCliente, setNombreCliente] = useState(user?.nombreReal ?? '');
   const [contacto, setContacto] = useState('');
@@ -61,19 +60,22 @@ export default function RealizarPedido() {
   }, []);
 
   const familias = useMemo(() => {
-    const filtered = categoriaFiltro === 'Todas' ? productosMock : productosMock.filter(p => p.categoria === categoriaFiltro);
+    const term = busqueda.trim().toLowerCase();
+    const coincide = (p: Producto) =>
+      !term ||
+      p.nombre.toLowerCase().includes(term) ||
+      p.subcategoria.toLowerCase().includes(term) ||
+      p.codigo.includes(term);
+    const filtered = productosMock.filter(
+      p => (categoriaFiltro === 'Todas' || p.categoria === categoriaFiltro) && coincide(p)
+    );
     const map = new Map<string, Producto[]>();
     for (const p of filtered) {
       if (!map.has(p.nombre)) map.set(p.nombre, []);
       map.get(p.nombre)!.push(p);
     }
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
-  }, [categoriaFiltro]);
-
-  const handleBuscar = () => {
-    if (!busqueda.trim()) return;
-    setResultados(buscarProductos(busqueda));
-  };
+  }, [categoriaFiltro, busqueda]);
 
   const agregarItem = (p: Producto) => {
     setError('');
@@ -86,7 +88,7 @@ export default function RealizarPedido() {
       if (1 > disponible) { mostrarError(`Stock disponible insuficiente para "${displayName(p)}".`); return; }
       setItems([...items, { producto: p, cantidad: 1, precioCongelado: p.precioVenta, subtotal: p.precioVenta }]);
     }
-    setBusqueda(''); setResultados([]);
+    setBusqueda('');
   };
 
   const cambiarCantidad = (codigo: string, nuevaCant: number) => {
@@ -113,7 +115,7 @@ export default function RealizarPedido() {
     setMostrarConfirmacion(true);
   };
 
-  const nuevoPedido = () => { setItems([]); setNombreCliente(user?.nombreReal ?? ''); setContacto(''); setDni(''); setMostrarConfirmacion(false); setError(''); setBusqueda(''); setResultados([]); };
+  const nuevoPedido = () => { setItems([]); setNombreCliente(user?.nombreReal ?? ''); setContacto(''); setDni(''); setMostrarConfirmacion(false); setError(''); setBusqueda(''); };
 
   const cantidadEnCarrito = (codigo: string) => items.find(i => i.producto.codigo === codigo)?.cantidad ?? 0;
 
@@ -197,9 +199,6 @@ export default function RealizarPedido() {
                 Nuevo Pedido
               </button>
             </div>
-            <div className="text-center text-sm text-slate-400 mt-4 pt-3 border-t border-slate-200 no-print">
-              <p>Contrato: realizarPedido(nombreCliente, contacto, dni, listaItems) — UC-08</p>
-            </div>
           </div>
         </div>
       </div>
@@ -247,105 +246,77 @@ export default function RealizarPedido() {
           </div>
         )}
 
-        {/* Tabs: Catálogo / Buscar */}
-        <div className="flex gap-1 mb-4 border-b border-slate-200 shrink-0">
-          <button onClick={() => setModo('catalogo')}
-            className={`flex items-center gap-1.5 px-5 py-2.5 text-base font-semibold border-b-2 transition-colors ${modo === 'catalogo' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
-            <BookOpen size={18} /> Catálogo
-          </button>
-          <button onClick={() => setModo('buscar')}
-            className={`flex items-center gap-1.5 px-5 py-2.5 text-base font-semibold border-b-2 transition-colors ${modo === 'buscar' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
-            <Search size={18} /> Buscar
-          </button>
-        </div>
-
         <div className="flex-1 min-h-0 overflow-y-auto">
-          {/* Search mode */}
-          {modo === 'buscar' && (
-            <div>
-              <div className="flex gap-2 mb-4 sticky top-0 bg-white pt-1 pb-2">
-                <input type="text" value={busqueda} onChange={e => setBusqueda(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleBuscar()} placeholder="Buscar producto por nombre, subcategoría o código..." className="flex-1 px-3.5 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base" />
-                <button onClick={handleBuscar} className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-base"><Search size={18} /> Buscar</button>
-              </div>
-
-              {resultados.length > 0 && (
-                <div className="border border-slate-200 rounded-lg overflow-hidden">
-                  {resultados.map(p => (
-                    <div key={p.codigo} className="flex items-center justify-between px-4 py-3 hover:bg-blue-50 border-b border-slate-100 last:border-0 cursor-pointer transition-colors" onClick={() => agregarItem(p)}>
-                      <div className="min-w-0">
-                        <p className="font-medium text-slate-800 text-base truncate">{displayName(p)}</p>
-                        <p className="text-sm text-slate-500">Stock disponible: {stockDisponible(p)} | Cód: {p.codigo}</p>
-                      </div>
-                      <div className="text-right ml-3 shrink-0">
-                        <p className="font-semibold text-blue-600 text-base">${p.precioVenta.toFixed(2)}</p>
-                        <p className="text-sm text-green-600 flex items-center gap-0.5 justify-end"><Plus size={14} /> agregar</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {!resultados.length && (
-                <p className="text-base text-slate-400 text-center py-10">Busque productos por nombre, subcategoría o código.</p>
+          {/* Buscador en vivo desplegado sobre el catálogo */}
+          <div className="sticky top-0 bg-white pt-1 pb-2 z-10">
+            <div className="flex items-center gap-2 mb-3">
+              <Search size={18} className="text-slate-400 shrink-0" />
+              <input
+                type="text"
+                value={busqueda}
+                onChange={e => setBusqueda(e.target.value)}
+                placeholder="Buscar producto por nombre, subcategoría o código..."
+                className="flex-1 px-3.5 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base"
+              />
+              {busqueda && (
+                <button onClick={() => setBusqueda('')} className="text-base text-slate-400 hover:text-slate-600 shrink-0">
+                  Limpiar
+                </button>
               )}
             </div>
-          )}
+            <div className="flex flex-wrap gap-2 mb-4">
+              {categorias.map(cat => (
+                <button key={cat} onClick={() => setCategoriaFiltro(cat)}
+                  className={`px-3.5 py-1.5 text-sm rounded-full border transition-colors ${categoriaFiltro === cat ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-300 hover:border-blue-400'}`}>
+                  {cat}
+                </button>
+              ))}
+            </div>
+          </div>
 
-          {/* Catalog mode — grouped by family */}
-          {modo === 'catalogo' && (
-            <div>
-              <div className="flex flex-wrap gap-2 mb-4 sticky top-0 bg-white pt-1 pb-2">
-                {categorias.map(cat => (
-                  <button key={cat} onClick={() => setCategoriaFiltro(cat)}
-                    className={`px-3.5 py-1.5 text-sm rounded-full border transition-colors ${categoriaFiltro === cat ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-300 hover:border-blue-400'}`}>
-                    {cat}
-                  </button>
-                ))}
-              </div>
-
-              <div className="grid grid-cols-2 xl:grid-cols-3 gap-3">
-                {familias.map(([familia, variantes]) => (
-                  <div key={familia} className="border border-slate-200 rounded-xl p-3.5 hover:border-blue-300 hover:shadow-sm transition-all">
-                    <div className="flex items-center gap-2 mb-2.5">
-                      <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
-                        <Package size={18} />
-                      </div>
-                      <h3 className="font-semibold text-slate-800 text-base truncate">{familia}</h3>
-                    </div>
-                    <div className="space-y-2">
-                      {variantes.map(p => {
-                        const enCarrito = cantidadEnCarrito(p.codigo);
-                        const sinStock = stockDisponible(p) <= 0;
-                        return (
-                          <div key={p.codigo} className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 ${sinStock ? 'opacity-50' : 'bg-slate-50 hover:bg-blue-50 transition-colors'}`}>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-base font-medium text-slate-700 truncate">{p.subcategoria}</p>
-                              <p className="text-sm text-slate-400">Stock disponible: {stockDisponible(p)} uds.</p>
-                            </div>
-                            <div className="flex items-center gap-2 ml-2 shrink-0">
-                              <span className="text-base font-bold text-blue-600 tabular-nums">${p.precioVenta.toFixed(2)}</span>
-                              {sinStock ? (
-                                <span className="text-sm text-red-500 font-medium whitespace-nowrap">Sin stock</span>
-                              ) : (
-                                <button onClick={() => agregarItem(p)}
-                                  className="flex items-center gap-0.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium whitespace-nowrap">
-                                  <Plus size={14} /> {enCarrito > 0 ? `+${enCarrito}` : 'Agregar'}
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    {variantes.length === 0 && <p className="text-sm text-slate-400 text-center py-2">Sin variantes disponibles</p>}
+          <div className="grid grid-cols-2 xl:grid-cols-3 gap-3">
+            {familias.map(([familia, variantes]) => (
+              <div key={familia} className="border border-slate-200 rounded-xl p-3.5 hover:border-blue-300 hover:shadow-sm transition-all">
+                <div className="flex items-center gap-2 mb-2.5">
+                  <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
+                    <Package size={18} />
                   </div>
-                ))}
+                  <h3 className="font-semibold text-slate-800 text-base truncate">{familia}</h3>
+                </div>
+                <div className="space-y-2">
+                  {variantes.map(p => {
+                    const enCarrito = cantidadEnCarrito(p.codigo);
+                    const sinStock = stockDisponible(p) <= 0;
+                    return (
+                      <div key={p.codigo} className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 ${sinStock ? 'opacity-50' : 'bg-slate-50 hover:bg-blue-50 transition-colors'}`}>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-base font-medium text-slate-700 truncate">{p.subcategoria}</p>
+                          <p className="text-sm text-slate-400">Stock disponible: {stockDisponible(p)} uds.</p>
+                        </div>
+                        <div className="flex items-center gap-2 ml-2 shrink-0">
+                          <span className="text-base font-bold text-blue-600 tabular-nums">${p.precioVenta.toFixed(2)}</span>
+                          {sinStock ? (
+                            <span className="text-sm text-red-500 font-medium whitespace-nowrap">Sin stock</span>
+                          ) : (
+                            <button onClick={() => agregarItem(p)}
+                              className="flex items-center gap-0.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium whitespace-nowrap">
+                              <Plus size={14} /> {enCarrito > 0 ? `+${enCarrito}` : 'Agregar'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {variantes.length === 0 && <p className="text-sm text-slate-400 text-center py-2">Sin variantes disponibles</p>}
               </div>
+            ))}
+          </div>
 
-              {familias.length === 0 && (
-                <p className="text-base text-slate-400 text-center py-10">No hay productos en esta categoría.</p>
-              )}
-            </div>
+          {familias.length === 0 && (
+            <p className="text-base text-slate-400 text-center py-10">
+              {busqueda.trim() ? 'Sin resultados para su búsqueda.' : 'No hay productos en esta categoría.'}
+            </p>
           )}
         </div>
       </section>
@@ -407,7 +378,7 @@ export default function RealizarPedido() {
                 <span className="text-3xl font-bold text-slate-800 tabular-nums">${total.toFixed(2)}</span>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-3" data-campos onKeyDown={siguienteCampo}>
                 <div>
                   <label className="block text-base font-semibold text-slate-700 mb-2 flex items-center gap-1.5"><User size={18} /> Nombre del cliente <span className="text-red-500">*</span></label>
                   <input type="text" value={nombreCliente} onChange={e => setNombreCliente(e.target.value)} placeholder="Nombre y apellido" className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base" />
@@ -418,7 +389,7 @@ export default function RealizarPedido() {
                 </div>
                 <div>
                   <label className="block text-base font-semibold text-slate-700 mb-2 flex items-center gap-1.5"><IdCard size={18} /> DNI <span className="text-red-500">*</span></label>
-                  <input type="text" value={dni} onChange={e => setDni(e.target.value)} placeholder="DNI del cliente" className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base" />
+                  <input type="text" value={dni} onChange={e => setDni(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); confirmarPedido(); } }} placeholder="DNI del cliente" className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base" />
                 </div>
               </div>
 

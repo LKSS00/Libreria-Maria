@@ -160,9 +160,6 @@ export default function ProcesarPedido() {
             <PackageCheck size={22} className="text-blue-600" />
             <h2 className="text-xl font-semibold text-slate-800">Pedidos Web</h2>
           </div>
-          <div className="text-sm text-slate-400 text-right">
-            Contrato: procesarPedido(unPedido, unEmpleado, unMedioPago) — UC-18
-          </div>
         </header>
 
         <div className="flex gap-1 mb-4 border-b border-slate-200 shrink-0">

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { productosMock, buscarProductos, buscarCliente, ventasMock, mediosPagoMock } from '../data/mockData';
 import { useAuth } from '../context/AuthContext';
 import type { Producto, DetalleVenta, Cliente, MedioPago, Venta, Usuario } from '../types';
@@ -39,7 +39,10 @@ export default function RegistrarVenta() {
   const { user } = useAuth();
   const { error: toastError } = useToast();
   const [busqueda, setBusqueda] = useState('');
-  const [resultados, setResultados] = useState<Producto[]>([]);
+  const resultados = useMemo(
+    () => (busqueda.trim() ? buscarProductos(busqueda).filter(p => p.stockActual > 0) : []),
+    [busqueda]
+  );
   const [items, setItems] = useState<DetalleVenta[]>([]);
   const [medioPago, setMedioPago] = useState<MedioPago>(mediosPagoMock[0]);
   const [clienteDni, setClienteDni] = useState('');
@@ -53,11 +56,6 @@ export default function RegistrarVenta() {
     toastError(msg);
   };
 
-  const handleBuscar = () => {
-    if (!busqueda.trim()) return;
-    setResultados(buscarProductos(busqueda).filter(p => p.stockActual > 0));
-  };
-
   const agregarItem = (p: Producto) => {
     setError('');
     const existente = items.find(i => i.producto.codigo === p.codigo);
@@ -68,7 +66,7 @@ export default function RegistrarVenta() {
       if (1 > p.stockActual) { mostrarError(`Stock insuficiente para "${displayName(p)}".`); return; }
       setItems([...items, { producto: p, cantidad: 1, precioCongelado: p.precioVenta, subtotal: p.precioVenta }]);
     }
-    setBusqueda(''); setResultados([]);
+    setBusqueda('');
   };
 
   const cambiarCantidad = (codigo: string, nuevaCant: number) => {
@@ -107,7 +105,7 @@ export default function RegistrarVenta() {
     setMostrarComprobante(true);
   };
 
-  const nuevaVenta = () => { setItems([]); setMedioPago(mediosPagoMock[0]); setClienteDni(''); setClienteValido(null); setClienteError(''); setMostrarComprobante(false); setError(''); setBusqueda(''); setResultados([]); };
+  const nuevaVenta = () => { setItems([]); setMedioPago(mediosPagoMock[0]); setClienteDni(''); setClienteValido(null); setClienteError(''); setMostrarComprobante(false); setError(''); setBusqueda(''); };
 
   if (mostrarComprobante) {
     const nroVenta = Math.floor(Math.random() * 9000) + 1000;
@@ -188,9 +186,6 @@ export default function RegistrarVenta() {
                 Nueva Venta
               </button>
             </div>
-            <div className="text-center text-sm text-slate-400 mt-4 pt-3 border-t border-slate-200 no-print">
-              <p>Contrato: registrarVenta(listaItems, unEmpleado, unCliente, unMedioPago) — UC-05</p>
-            </div>
           </div>
         </div>
       </div>
@@ -206,18 +201,20 @@ export default function RegistrarVenta() {
           <h2 className="text-xl font-semibold text-slate-800">Productos</h2>
         </header>
 
-        <div className="flex gap-2 mb-4 shrink-0">
+        <div className="flex items-center gap-2 mb-4 shrink-0">
+          <Search size={18} className="text-slate-400 shrink-0" />
           <input
             type="text"
             value={busqueda}
             onChange={e => setBusqueda(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleBuscar()}
             placeholder="Nombre, subcategoría o código..."
             className="flex-1 px-3.5 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base"
           />
-          <button onClick={handleBuscar} className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-base shrink-0">
-            <Search size={18} /> Buscar
-          </button>
+          {busqueda && (
+            <button onClick={() => setBusqueda('')} className="text-base text-slate-400 hover:text-slate-600 shrink-0">
+              Limpiar
+            </button>
+          )}
         </div>
 
         {error && <div className="mb-3 shrink-0 bg-red-50 text-red-600 px-4 py-2 rounded-lg text-base">{error}</div>}
@@ -241,7 +238,9 @@ export default function RegistrarVenta() {
           ) : (
             <div className="h-full flex flex-col items-center justify-center text-slate-400 py-10">
               <PackageSearch size={40} className="mb-2 opacity-40" />
-              <p className="text-base text-center">Busque productos para<br />comenzar la venta.</p>
+              <p className="text-base text-center">
+                {busqueda.trim() ? 'Sin resultados para su búsqueda.' : <>Busque productos para<br />comenzar la venta.</>}
+              </p>
             </div>
           )}
         </div>
@@ -318,7 +317,11 @@ export default function RegistrarVenta() {
                 <div className="flex gap-2">
                   <input
                     type="text" value={clienteDni} onChange={e => setClienteDni(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && verificarCliente()}
+                    onKeyDown={e => {
+                      if (e.key !== 'Enter') return;
+                      if (clienteValido && items.length > 0) { e.preventDefault(); confirmarVenta(); }
+                      else verificarCliente();
+                    }}
                     placeholder="Ingrese el DNI del cliente" className="flex-1 px-3.5 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base"
                   />
                   <button type="button" onClick={verificarCliente} className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-base shrink-0">

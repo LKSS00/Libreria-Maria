@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, Info } from 'lucide-react';
+import { siguienteCampo } from '../utils/campoForm';
 
 export default function Login() {
   const { login } = useAuth();
@@ -36,7 +37,7 @@ export default function Login() {
           <p className="text-slate-500 mt-1.5 text-lg">Acceso al Sistema</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} onKeyDown={siguienteCampo} className="space-y-6">
           <div>
             <label className="block text-base font-medium text-slate-700 mb-1.5">Usuario</label>
             <input
